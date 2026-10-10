@@ -9,25 +9,27 @@ import { MembershipStatus } from "~context/enums";
 
 const helpers = new MembershipIntegrationHelpers();
 
-describe("MembershipService integration", () => {
+describe("[DomainService] - Membership", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("leave / block", () => {
+    describe("[Behavior] - membership removal", () => {
         it.each([
             { operation: "leave", expectedStatus: MembershipStatus.LEFT },
             { operation: "block", expectedStatus: MembershipStatus.BLOCKED },
         ] as const)(
-            "$operation changes membership status and cleans project assignments",
+            "[case] - $operation changes membership status and cleans project assignments",
             async ({ operation, expectedStatus }) => {
+                // Arrange
                 const organization = await suite.fixtures().createOrganization();
                 const membership = await suite.fixtures().createMembership({ organization });
                 const project = await suite.fixtures().createProject({ organization });
                 const unrelatedProject = await suite.fixtures().createProject({ organization });
                 await suite.fixtures().createProjectAccountAssignment({ membership, project });
 
+                // Act
                 const result = await suite.transaction((transaction) =>
                     suite.repository().membershipService[operation]({
                         account: membership.account,
@@ -36,10 +38,7 @@ describe("MembershipService integration", () => {
                         transaction,
                     }),
                 );
-
-                expect(result.access.map(({ realm }) => realm).sort()).toEqual(
-                    [organization.realm, project.realm, unrelatedProject.realm].sort(),
-                );
+                const result1 = result.access.map(({ realm }) => realm).sort();
                 const [loaded, projectCount] = await suite.transaction(
                     async (transaction) =>
                         await Promise.all([
@@ -47,14 +46,18 @@ describe("MembershipService integration", () => {
                             transaction.count(ProjectAccountAssignment, { membership: { id: membership.id } }),
                         ]),
                 );
+
+                // Assert
+                expect(result1).toEqual([organization.realm, project.realm, unrelatedProject.realm].sort());
                 expect(loaded.status).toBe(expectedStatus);
                 expect(projectCount).toBe(0);
             },
         );
     });
 
-    describe("resume", () => {
-        it("rejects resume after leaving without bypassing the join process", async () => {
+    describe("[Method] - resume", () => {
+        it("[case] - rejects resume after leaving without bypassing the join process", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const membership = await suite.fixtures().createMembership({ organization });
             await suite.transaction(async (transaction) => {
@@ -62,29 +65,32 @@ describe("MembershipService integration", () => {
                 entity.leave();
             });
 
-            await expect(
-                suite.transaction((transaction) =>
-                    suite.repository().membershipService.resume({
-                        identifiers: [membership.id],
-                        realm: organization.realm,
-                        transaction,
-                    }),
-                ),
-            ).rejects.toThrow("CANNOT_ACTIVATE");
+            // Act
+            const result = suite.transaction((transaction) =>
+                suite.repository().membershipService.resume({
+                    identifiers: [membership.id],
+                    realm: organization.realm,
+                    transaction,
+                }),
+            );
+            await Promise.allSettled([result]);
+            const result1 = await suite.transaction((transaction) =>
+                transaction.count(Membership, { id: membership.id, status: MembershipStatus.LEFT }),
+            );
 
-            await expect(
-                suite.transaction((transaction) =>
-                    transaction.count(Membership, { id: membership.id, status: MembershipStatus.LEFT }),
-                ),
-            ).resolves.toBe(1);
+            // Assert
+            await expect(result).rejects.toThrow("CANNOT_ACTIVATE");
+            expect(result1).toBe(1);
         });
     });
 
-    describe("join", () => {
-        it("joins a new account into an active organization", async () => {
+    describe("[Method] - join", () => {
+        it("[case] - joins a new account into an active organization", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const account = randomUUID();
 
+            // Act
             const membership = await suite.transaction((transaction) =>
                 suite.repository().membershipService.join({
                     input: { organization: organization.id, account },
@@ -92,10 +98,12 @@ describe("MembershipService integration", () => {
                     transaction,
                 }),
             );
+            const result = await suite.transaction((transaction) =>
+                transaction.count(Membership, { id: membership.id, account }),
+            );
 
-            await expect(
-                suite.transaction((transaction) => transaction.count(Membership, { id: membership.id, account })),
-            ).resolves.toBe(1);
+            // Assert
+            expect(result).toBe(1);
         });
     });
 });

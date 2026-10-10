@@ -12,15 +12,17 @@ const ACTOR_ID        = "00000000-0000-4000-8000-100000000003";
 
 const helpers = new OrganizationUnitHelpers();
 
-describe("OrganizationService", () => {
+describe("[DomainService] - Organization", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("create", () => {
-        it("creates an organization with its owner membership and persists both", () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates an organization with its owner membership and persists both", () => {
+            // Arrange
             const { service, transaction } = helpers.service();
 
+            // Act
             const result = service.create({
                 input: {
                     title: "Organization",
@@ -30,6 +32,7 @@ describe("OrganizationService", () => {
                 actor: ACTOR_ID,
             });
 
+            // Assert
             expect(result.organization.owner).toBe(result.membership);
             expect(result.membership.account).toBe(ACTOR_ID);
             expect(transaction.persist).toHaveBeenNthCalledWith(1, result.organization);
@@ -37,11 +40,12 @@ describe("OrganizationService", () => {
         });
     });
 
-    describe("bootstrap responses", () => {
+    describe("[Behavior] - bootstrap responses", () => {
         it.each([
             [PlatformService.ACCESS_CONTROL_SERVICE, PlatformService.HR_SERVICE],
             [PlatformService.HR_SERVICE, PlatformService.ACCESS_CONTROL_SERVICE],
-        ] as const)("waits for both services when %s confirms first", async (first, second) => {
+        ] as const)("[case] - waits for both services when %s confirms first", async (first, second) => {
+            // Arrange
             const { service, repositories, transaction } = helpers.service();
             const { organization, membership } = service.create({
                 input: { title: "Pending", description: "Description" },
@@ -60,20 +64,6 @@ describe("OrganizationService", () => {
                 },
             };
 
-            await confirm(first);
-            await confirm(first);
-
-            expect(organization.status).toBe(OrganizationStatus.PROVISIONING);
-            expect(membership.status).toBe(MembershipStatus.JOINING);
-            expect(organization.bootstrapPending).toEqual([second]);
-
-            await confirm(second);
-            expect(organization.status).toBe(OrganizationStatus.ACTIVE);
-            expect(membership.status).toBe(MembershipStatus.ACTIVE);
-            expect(organization.process).toBeUndefined();
-            expect(organization.bootstrapPending).toEqual([]);
-            await expect(confirm(first)).resolves.toEqual({ realms: [] });
-
             function confirm(
                 participant: PlatformService.ACCESS_CONTROL_SERVICE | PlatformService.HR_SERVICE,
             ): Services.Organization.ConfirmBootstrap.Result {
@@ -82,11 +72,35 @@ describe("OrganizationService", () => {
                     input: { ...request.input, service: participant },
                 });
             }
+
+            // Act
+            await confirm(first);
+            await confirm(first);
+            const result = organization.status;
+            const result1 = membership.status;
+            const result2 = organization.bootstrapPending;
+            await confirm(second);
+            const result3 = organization.status;
+            const result4 = membership.status;
+            const result5 = organization.process;
+            const result6 = organization.bootstrapPending;
+            const result7 = await confirm(first);
+
+            // Assert
+            expect(result).toBe(OrganizationStatus.PROVISIONING);
+            expect(result1).toBe(MembershipStatus.JOINING);
+            expect(result2).toEqual([second]);
+            expect(result3).toBe(OrganizationStatus.ACTIVE);
+            expect(result4).toBe(MembershipStatus.ACTIVE);
+            expect(result5).toBeUndefined();
+            expect(result6).toEqual([]);
+            expect(result7).toEqual({ realms: [] });
         });
 
         it.each([PlatformService.ACCESS_CONTROL_SERVICE, PlatformService.HR_SERVICE] as const)(
-            "removes the organization and requests cleanup after %s succeeded and the other failed",
+            "[case] - removes the organization and requests cleanup after %s succeeded and the other failed",
             async (participant) => {
+                // Arrange
                 const { service, repositories, transaction } = helpers.service();
                 const { organization } = service.create({
                     input: { title: "Pending", description: "Description" },
@@ -104,22 +118,29 @@ describe("OrganizationService", () => {
                         process: organization.process!,
                     },
                 };
+
+                // Act
                 await service.confirmBootstrap({ ...request, input: { ...request.input, service: participant } });
-
-                await expect(
-                    service.rejectBootstrap({ ...request, input: { ...request.input, reason: "Rejected" } }),
-                ).resolves.toEqual({ realms: [{ realm: organization.realm }] });
-                expect(transaction.remove).toHaveBeenCalledWith(organization);
-
+                const result = await service.rejectBootstrap({
+                    ...request,
+                    input: { ...request.input, reason: "Rejected" },
+                });
+                const calls = transaction.remove.mock.calls.slice();
                 repositories.organizations.findUnique.mockImplementation(() => Promise.resolve(null));
-                await expect(service.confirmBootstrap(request)).resolves.toEqual({
+                const result1 = await service.confirmBootstrap(request);
+
+                // Assert
+                expect(result).toEqual({ realms: [{ realm: organization.realm }] });
+                expect(calls).toContainEqual([organization]);
+                expect(result1).toEqual({
                     realms: [{ realm: organization.realm }],
                 });
                 expect(organization.status).toBe(OrganizationStatus.PROVISIONING);
             },
         );
 
-        it("ignores a response from another process without changing either local entity", async () => {
+        it("[case] - ignores a response from another process without changing either local entity", async () => {
+            // Arrange
             const { service, repositories, transaction } = helpers.service();
             const { organization, membership } = service.create({
                 input: { title: "Pending", description: "Description" },
@@ -139,16 +160,22 @@ describe("OrganizationService", () => {
                 },
             };
 
-            await expect(service.confirmBootstrap(request)).resolves.toEqual({ realms: [] });
-            await expect(service.rejectBootstrap(request)).resolves.toEqual({ realms: [] });
+            // Act
+            const result = await service.confirmBootstrap(request);
+            const result1 = await service.rejectBootstrap(request);
+
+            // Assert
+            expect(result).toEqual({ realms: [] });
+            expect(result1).toEqual({ realms: [] });
             expect(organization.bootstrapPending).toHaveLength(2);
             expect(membership.status).toBe(MembershipStatus.JOINING);
             expect(transaction.remove).not.toHaveBeenCalled();
         });
     });
 
-    describe("update / transferOwnership", () => {
-        it("updates and transfers ownership using scoped repository lookups", async () => {
+    describe("[Behavior] - metadata and ownership changes", () => {
+        it("[case] - updates and transfers ownership using scoped repository lookups", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
             });
@@ -162,6 +189,7 @@ describe("OrganizationService", () => {
             repositories.memberships.findUniqueOrThrow.mockImplementation(() => Promise.resolve(membership));
             const updateSpy = jest.spyOn(organization, "update");
 
+            // Act
             await service.update({
                 realm: organization.realm,
                 id: ORGANIZATION_ID,
@@ -175,6 +203,7 @@ describe("OrganizationService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(updateSpy).toHaveBeenCalledWith({ patch: { title: "Updated" } });
             expect(repositories.organizations.findUniqueOrThrow).toHaveBeenCalledWith({
                 where: { id: ORGANIZATION_ID, realm: organization.realm },
@@ -195,8 +224,9 @@ describe("OrganizationService", () => {
         });
     });
 
-    describe("revoke / restore", () => {
-        it("deduplicates bulk identifiers and rejects incomplete repository results", async () => {
+    describe("[Behavior] - revocation lifecycle", () => {
+        it("[case] - deduplicates bulk identifiers and rejects incomplete repository results", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
             });
@@ -205,43 +235,45 @@ describe("OrganizationService", () => {
                 projects: [],
             });
 
-            await expect(
-                service.revoke({
-                    identifiers: [ORGANIZATION_ID, ORGANIZATION_ID],
-                    transaction: transaction.entityManager,
-                    actor: ACTOR_ID,
-                    global: false,
-                }),
-            ).resolves.toEqual({
+            // Act
+            const result = await service.revoke({
+                identifiers: [ORGANIZATION_ID, ORGANIZATION_ID],
+                transaction: transaction.entityManager,
+                actor: ACTOR_ID,
+                global: false,
+            });
+            const calls = repositories.organizations.find.mock.calls.slice();
+            repositories.organizations.find.mockImplementation(() => Promise.resolve([]));
+            const result1 = service.restore({
+                transaction: transaction.entityManager,
+                identifiers: [ORGANIZATION_ID],
+                actor: ACTOR_ID,
+                global: false,
+            });
+
+            // Assert
+            expect(result).toEqual({
                 organizations: [organization],
                 realms: [{ realm: organization.realm }],
             });
-
-            expect(repositories.organizations.find).toHaveBeenCalledWith({
-                where: { id: { $in: [ORGANIZATION_ID] }, owner: { account: ACTOR_ID } },
-                options: {
-                    lockMode: LockMode.PESSIMISTIC_WRITE,
-                    orderBy: { id: "ASC" },
-                    refresh: true,
-                },
-                transaction: transaction.entityManager,
-            });
-
-            repositories.organizations.find.mockImplementation(() => Promise.resolve([]));
-
-            await expect(
-                service.restore({
+            expect(calls).toContainEqual([
+                {
+                    where: { id: { $in: [ORGANIZATION_ID] }, owner: { account: ACTOR_ID } },
+                    options: {
+                        lockMode: LockMode.PESSIMISTIC_WRITE,
+                        orderBy: { id: "ASC" },
+                        refresh: true,
+                    },
                     transaction: transaction.entityManager,
-                    identifiers: [ORGANIZATION_ID],
-                    actor: ACTOR_ID,
-                    global: false,
-                }),
-            ).rejects.toThrow("services.organization.ORGANIZATIONS_NOT_FOUND");
+                },
+            ]);
+            await expect(result1).rejects.toThrow("services.organization.ORGANIZATIONS_NOT_FOUND");
         });
     });
 
-    describe("purge", () => {
-        it("checks purge eligibility and removes revoked organizations", async () => {
+    describe("[Method] - purge", () => {
+        it("[case] - checks purge eligibility and removes revoked organizations", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
                 status: OrganizationStatus.REVOKED,
@@ -251,51 +283,61 @@ describe("OrganizationService", () => {
             });
             const canPurgeSpy = jest.spyOn(organization, "canPurge");
 
-            await expect(
-                service.purge({
-                    transaction: transaction.entityManager,
-                    identifiers: [ORGANIZATION_ID],
-                    actor: ACTOR_ID,
-                    global: false,
-                }),
-            ).resolves.toEqual({
+            // Act
+            const result = await service.purge({
+                transaction: transaction.entityManager,
+                identifiers: [ORGANIZATION_ID],
+                actor: ACTOR_ID,
+                global: false,
+            });
+
+            // Assert
+            expect(result).toEqual({
                 organizations: [organization],
                 realms: [{ realm: organization.realm }],
             });
-
             expect(canPurgeSpy).toHaveBeenCalledTimes(1);
             expect(transaction.remove.mock.calls).toEqual([[[organization]]]);
         });
     });
 
-    describe("purge / purgeOwned", () => {
-        it.each(["purge", "purgeOwned"] as const)("rejects %s while a child process is pending", async (method) => {
-            const organization = helpers.createOrganization({ status: OrganizationStatus.REVOKED });
-            const { service, transaction, hasPendingProcesses } = helpers.service({ organizations: [organization] });
-            hasPendingProcesses.mockResolvedValue(true);
+    describe("[Behavior] - organization deletion", () => {
+        it.each(["purge", "purgeOwned"] as const)(
+            "[case] - rejects %s while a child process is pending",
+            async (method) => {
+                // Arrange
+                const organization = helpers.createOrganization({ status: OrganizationStatus.REVOKED });
+                const { service, transaction, hasPendingProcesses } = helpers.service({ organizations: [organization] });
+                hasPendingProcesses.mockResolvedValue(true);
 
-            const result = service[method]({
-                identifiers: [organization.id],
-                account: ACTOR_ID,
-                actor: ACTOR_ID,
-                global: false,
-                transaction: transaction.entityManager,
-            });
+                // Act
+                const result = service[method]({
+                    identifiers: [organization.id],
+                    account: ACTOR_ID,
+                    actor: ACTOR_ID,
+                    global: false,
+                    transaction: transaction.entityManager,
+                });
 
-            await expect(result).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
-            expect(hasPendingProcesses).toHaveBeenCalledWith({
-                identifiers: [organization.id],
-                transaction: transaction.entityManager,
-            });
-            expect(transaction.remove).not.toHaveBeenCalled();
-        });
+                // Assert
+                await expect(result).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
+                expect(hasPendingProcesses).toHaveBeenCalledWith({
+                    identifiers: [organization.id],
+                    transaction: transaction.entityManager,
+                });
+                expect(transaction.remove).not.toHaveBeenCalled();
+            },
+        );
 
-        it("rejects owner cleanup while the organization itself has a pending process", async () => {
+        it("[case] - rejects owner cleanup while the organization itself has a pending process", async () => {
+            // Arrange
             const organization = helpers.createOrganization({ process: "pending-process" });
             const { service, transaction } = helpers.service({ organizations: [organization] });
 
+            // Act
             const result = service.purgeOwned({ account: ACTOR_ID, transaction: transaction.entityManager });
 
+            // Assert
             await expect(result).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
             expect(transaction.remove).not.toHaveBeenCalled();
         });

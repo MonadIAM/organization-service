@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Scope } from "@nestjs/common";
 import { LockMode } from "@mikro-orm/core";
+import { randomUUID } from "node:crypto";
 
 import { MEMBERSHIP_REPOSITORY, ORGANIZATION_REPOSITORY, PROJECT_REPOSITORY } from "~context/infrastructure/repositories";
 import { MembershipStatus, OrganizationStatus, PlatformService, ProjectStatus } from "~context/enums";

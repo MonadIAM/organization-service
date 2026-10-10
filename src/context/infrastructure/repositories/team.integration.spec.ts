@@ -8,14 +8,15 @@ import { TeamStatus } from "~context/enums";
 
 import { TeamRepository } from "./team.repository";
 
-describe("TeamRepository", () => {
+describe("[Repository] - Team", () => {
     const suite = postgresSuite({
         repository: ({ readManager }) => new TeamRepository(readManager),
         fixture: (entityManager) => new TeamFixture(entityManager),
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("maps the persisted team through the schema", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - maps the persisted team through the schema", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const department = await suite.fixtures().createDepartment({ organization });
             const team = await suite.fixtures().createTeam({
@@ -24,8 +25,10 @@ describe("TeamRepository", () => {
                 department,
             });
 
+            // Act
             const loaded = await suite.repository().findUniqueOrThrow({ where: { id: team.id } });
 
+            // Assert
             expect(loaded).toMatchObject({
                 description: "Mapping team description",
                 status: TeamStatus.ACTIVE,
@@ -39,10 +42,12 @@ describe("TeamRepository", () => {
         });
     });
 
-    describe("findMany", () => {
-        it("finds teams by organization, department, name and status mapper filters", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds teams by organization, department, name and status mapper filters", async () => {
+            // Arrange
             const { organization, department, matched } = await suite.fixtures().filterScenario();
 
+            // Act
             const [teams, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 sort: { createdAt: QueryOrder.ASC },
@@ -53,26 +58,35 @@ describe("TeamRepository", () => {
                     status: { operator: PublicStringOperator.EQUAL, value: TeamStatus.ACTIVE },
                 },
             });
+            const result = total;
+            const result1 = teams.map(({ id }) => id);
 
-            expect(total).toBe(1);
-            expect(teams.map(({ id }) => id)).toEqual([matched.id]);
+            // Assert
+            expect(result).toBe(1);
+            expect(result1).toEqual([matched.id]);
         });
     });
 
-    describe("getLookupList", () => {
-        it("uses trigram lookup scoped to organization and department", async () => {
+    describe("[Method] - getLookupList", () => {
+        it("[case] - uses trigram lookup scoped to organization and department", async () => {
+            // Arrange
             const scenario = await suite.fixtures().lookupSearchScenario();
 
+            // Act
             const [teams, total] = await suite.repository().getLookupList({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 organization: scenario.organization.id,
                 department: scenario.department.id,
                 term: scenario.term,
             });
+            const result = total;
+            const result1 = teams[0]?.id;
+            const result2 = teams.map(({ name }) => name);
 
-            expect(total).toBe(2);
-            expect(teams[0]?.id).toBe(scenario.exact.id);
-            expect(teams.map(({ name }) => name)).toEqual(scenario.expectedNames);
+            // Assert
+            expect(result).toBe(2);
+            expect(result1).toBe(scenario.exact.id);
+            expect(result2).toEqual(scenario.expectedNames);
         });
     });
 });

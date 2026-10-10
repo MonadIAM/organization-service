@@ -23,86 +23,141 @@ function createMembership(organization: Organization): Membership {
     return new Membership({ account: ACCOUNT_ID, organization });
 }
 
-describe("Organization Entity", () => {
-    describe("constructor", () => {
-        it("should initialize an active organization", () => {
-            const organization = createOrganization();
+describe("[Entity] - Organization", () => {
+    describe("[Method] - constructor", () => {
+        it("[case] - initializes an active organization", () => {
+            // Arrange
 
-            expect(isUUID(organization.id, "4")).toBe(true);
+            // Act
+            const organization = createOrganization();
+            const result = isUUID(organization.id, "4");
+
+            // Assert
+            expect(result).toBe(true);
             expect(organization.status).toBe(OrganizationStatus.ACTIVE);
             expect(organization.createdAt).toBeInstanceOf(Date);
             expect(organization.version).toBe(1);
         });
     });
 
-    describe("transferOwnership", () => {
-        it("should transfer ownership", () => {
+    describe("[Method] - transferOwnership", () => {
+        it("[case] - transfers ownership", () => {
+            // Arrange
             const organization = createOrganization();
             const membership = createMembership(organization);
 
+            // Act
             organization.transferOwnership({ membership });
 
+            // Assert
             expect(organization.owner).toBe(membership);
             expect(organization.updatedAt).toBeInstanceOf(Date);
         });
 
-        it("should reject transferring ownership to the current owner", () => {
+        it("[case] - rejects transferring ownership to the current owner", () => {
+            // Arrange
             const organization = createOrganization();
             const membership = createMembership(organization);
             organization.transferOwnership({ membership });
 
-            expect(() => organization.transferOwnership({ membership })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => organization.transferOwnership({ membership });
+
+            // Assert
+            expect(act).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("update", () => {
-        it("should update mutable metadata", () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates mutable metadata", () => {
+            // Arrange
             const organization = createOrganization();
 
+            // Act
             organization.update({
                 patch: { description: "Updated", title: "Updated organization" },
             });
 
+            // Assert
             expect(organization.description).toBe("Updated");
             expect(organization.title).toBe("Updated organization");
             expect(organization.updatedAt).toBeInstanceOf(Date);
         });
 
-        it("should reject empty and unchanged metadata updates", () => {
+        it("[case] - rejects empty and unchanged metadata updates", () => {
+            // Arrange
             const organization = createOrganization();
 
-            expect(() => organization.update({ patch: {} })).toThrow("EMPTY_UPDATE_PATCH");
-            expect(() => organization.update({ patch: { title: organization.title } })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => organization.update({ patch: {} });
+            const act1 = (): unknown => organization.update({ patch: { title: organization.title } });
+
+            // Assert
+            expect(act).toThrow("EMPTY_UPDATE_PATCH");
+            expect(act1).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("revoke / restore / canPurge", () => {
-        it("should revoke and restore organization", () => {
+    describe("[Behavior] - revocation lifecycle", () => {
+        it("[case] - revokes and restore organization", () => {
+            // Arrange
             const organization = createOrganization();
 
+            // Act
             organization.revoke();
-            expect(organization.status).toBe(OrganizationStatus.REVOKED);
-            expect(organization.revokedAt).toBeInstanceOf(Date);
-
+            const result = organization.status;
+            const result1 = organization.revokedAt;
             organization.restore();
+
+            // Assert
+            expect(result).toBe(OrganizationStatus.REVOKED);
+            expect(result1).toBeInstanceOf(Date);
             expect(organization.status).toBe(OrganizationStatus.ACTIVE);
             expect(organization.revokedAt).toBeUndefined();
         });
 
-        it("should reject duplicate lifecycle transitions", () => {
+        it("[case] - rejects restoring an active organization", () => {
+            // Arrange
             const organization = createOrganization();
-            expect(() => organization.restore()).toThrow("ALREADY_ACTIVE");
 
+            // Act
+            const act = (): unknown => organization.restore();
+
+            // Assert
+            expect(act).toThrow("ALREADY_ACTIVE");
+        });
+        it("[case] - rejects revoking a revoked organization", () => {
+            // Arrange
+            const organization = createOrganization();
             organization.revoke();
-            expect(() => organization.revoke()).toThrow("ALREADY_REVOKED");
+
+            // Act
+            const act = (): unknown => organization.revoke();
+
+            // Assert
+            expect(act).toThrow("ALREADY_REVOKED");
         });
 
-        it("should allow purging only a revoked organization", () => {
+        it("[case] - rejects purging an active organization", () => {
+            // Arrange
             const organization = createOrganization();
 
-            expect(() => organization.canPurge()).toThrow("CANNOT_PURGE_ACTIVE");
+            // Act
+            const act = (): unknown => organization.canPurge();
+
+            // Assert
+            expect(act).toThrow("CANNOT_PURGE_ACTIVE");
+        });
+        it("[case] - allows purging a revoked organization", () => {
+            // Arrange
+            const organization = createOrganization();
             organization.revoke();
-            expect(() => organization.canPurge()).not.toThrow();
+
+            // Act
+            const act = (): unknown => organization.canPurge();
+
+            // Assert
+            expect(act).not.toThrow();
         });
     });
 });

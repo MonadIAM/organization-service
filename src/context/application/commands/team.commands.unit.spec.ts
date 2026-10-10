@@ -11,16 +11,19 @@ const ID = "entity-a";
 const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const helpers = new TeamCommandsUnitHelpers();
 
-describe("TeamCommands", () => {
-    describe("create", () => {
-        it("creates in a transaction with the required ownership scope", async () => {
+describe("[Commands] - Team", () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates in a transaction with the required ownership scope", async () => {
+            // Arrange
             const { commands, teamService, transaction, run } = helpers.commands();
             const input = { department: "parent-id", name: "New entity", description: "Description" };
             const created = helpers.createTeam();
             teamService.create.mockResolvedValue(created);
 
+            // Act
             await commands.create({ input, actor: ACTOR, context: CONTEXT, realm: REALM });
 
+            // Assert
             expect(teamService.create.mock.calls).toEqual([
                 [{ input, transaction: transaction.entityManager, realm: REALM }],
             ]);
@@ -30,47 +33,58 @@ describe("TeamCommands", () => {
         });
     });
 
-    describe("archive / restore / purge", () => {
+    describe("[Behavior] - archive lifecycle", () => {
         it.each([
             { method: "archive", count: 1 },
             { method: "archive", count: 2 },
             { method: "restore", count: 2 },
             { method: "purge", count: 2 },
-        ] as const)("$method preserves realm scope and reports $count changed entities", async ({ method, count }) => {
-            const { commands, teamService, transaction, run } = helpers.commands();
-            const entities = Array.from({ length: count }, () => helpers.createTeam());
-            const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
-            teamService[method].mockResolvedValue(entities);
+        ] as const)(
+            "[case] - $method preserves realm scope and reports $count changed entities",
+            async ({ method, count }) => {
+                // Arrange
+                const { commands, teamService, transaction, run } = helpers.commands();
+                const entities = Array.from({ length: count }, () => helpers.createTeam());
+                const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
+                teamService[method].mockResolvedValue(entities);
 
-            const result = await commands[method]({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
+                // Act
+                const result = await commands[method]({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
 
-            expect(teamService[method].mock.calls).toEqual([
-                [{ identifiers: input.identifiers, realm: REALM, transaction: transaction.entityManager }],
-            ]);
-            expect(result.params).toEqual(count > 1 ? { count } : undefined);
-            expect(run).toHaveBeenCalledTimes(1);
-        });
+                // Assert
+                expect(teamService[method].mock.calls).toEqual([
+                    [{ identifiers: input.identifiers, realm: REALM, transaction: transaction.entityManager }],
+                ]);
+                expect(result.params).toEqual(count > 1 ? { count } : undefined);
+                expect(run).toHaveBeenCalledTimes(1);
+            },
+        );
     });
 
-    describe("update", () => {
-        it("updates only the patch within the requested realm", async () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates only the patch within the requested realm", async () => {
+            // Arrange
             const { commands, teamService, transaction } = helpers.commands();
             const input = { patch: { name: "Renamed" }, reason: "Correction" };
 
+            // Act
             await commands.update({ input, id: ID, realm: REALM, actor: ACTOR, context: CONTEXT });
 
+            // Assert
             expect(teamService.update.mock.calls).toEqual([
                 [{ patch: input.patch, id: ID, realm: REALM, transaction: transaction.entityManager }],
             ]);
         });
     });
 
-    describe("changeLead", () => {
-        it.each([ID, null])("changes the responsible position to %s within the realm", async (position) => {
+    describe("[Method] - changeLead", () => {
+        it.each([ID, null])("[case] - changes the responsible position to %s within the realm", async (position) => {
+            // Arrange
             const { commands, teamService, transaction, run } = helpers.commands();
             const team = helpers.createTeam();
             teamService.changeLead.mockResolvedValue(team);
 
+            // Act
             await commands.changeLead({
                 input: { position, reason: "Rotation" },
                 id: ID,
@@ -78,11 +92,13 @@ describe("TeamCommands", () => {
                 actor: ACTOR,
                 context: CONTEXT,
             });
+            const result = teamService.changeLead.mock.calls;
+            const calls2 = run.mock.calls.slice();
+            const result3 = await run.mock.results[0].value;
 
-            expect(teamService.changeLead.mock.calls).toEqual([
-                [{ position, id: ID, realm: REALM, transaction: transaction.entityManager }],
-            ]);
-            expect(run).toHaveBeenCalledWith(
+            // Assert
+            expect(result).toEqual([[{ position, id: ID, realm: REALM, transaction: transaction.entityManager }]]);
+            expect(calls2).toContainEqual([
                 expect.objectContaining({
                     outbox: {
                         payloadMapper: TeamMapper.prototype.referencePayload,
@@ -90,22 +106,28 @@ describe("TeamCommands", () => {
                         actionType: PositionTopicAction.REFERENCE_REQUESTED,
                     },
                 }),
-            );
-            await expect(run.mock.results[0].value).resolves.toEqual({ team, actor: ACTOR, realm: REALM });
+            ]);
+            expect(result3).toEqual({ team, actor: ACTOR, realm: REALM });
         });
     });
 
-    describe("purge", () => {
-        it("schedules HR cleanup for the removed entities in the deletion transaction", async () => {
+    describe("[Method] - purge", () => {
+        it("[case] - schedules HR cleanup for the removed entities in the deletion transaction", async () => {
+            // Arrange
             const { commands, teamService, run } = helpers.commands();
             const teams = [helpers.createTeam(), helpers.createTeam()];
             const input = { identifiers: teams.map((entity) => entity.id), reason: "Cleanup" };
             teamService.purge.mockResolvedValue(teams);
 
+            // Act
             await commands.purge({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
+            const calls = run.mock.calls.slice();
+            const calls1 = run.mock.calls.slice();
+            const result = await run.mock.results[0].value;
 
-            expect(run).toHaveBeenCalledTimes(1);
-            expect(run).toHaveBeenCalledWith(
+            // Assert
+            expect(calls).toHaveLength(1);
+            expect(calls1).toContainEqual([
                 expect.objectContaining({
                     changeLog: true,
                     outbox: {
@@ -114,25 +136,28 @@ describe("TeamCommands", () => {
                         actionType: PositionTopicAction.TEAM_PURGED,
                     },
                 }),
-            );
-            await expect(run.mock.results[0].value).resolves.toEqual({ teams, actor: ACTOR, realm: REALM });
+            ]);
+            expect(result).toEqual({ teams, actor: ACTOR, realm: REALM });
         });
     });
 
-    describe("archive", () => {
-        it("propagates a domain failure through the transaction", async () => {
+    describe("[Method] - archive", () => {
+        it("[case] - propagates a domain failure through the transaction", async () => {
+            // Arrange
             const { commands, teamService } = helpers.commands();
             const failure = new Error("domain rejected mutation");
             teamService.archive.mockRejectedValue(failure);
 
-            await expect(
-                commands.archive({
-                    input: { identifiers: [ID], reason: "Requested change" },
-                    actor: ACTOR,
-                    realm: REALM,
-                    context: CONTEXT,
-                }),
-            ).rejects.toBe(failure);
+            // Act
+            const result = commands.archive({
+                input: { identifiers: [ID], reason: "Requested change" },
+                actor: ACTOR,
+                realm: REALM,
+                context: CONTEXT,
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(failure);
         });
     });
 });

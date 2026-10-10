@@ -9,8 +9,8 @@ const ID = "entity-a";
 const PAGINATION: Pagination = { currentPage: 2, elementsPerPage: 10 };
 const helpers = new MembershipQueriesUnitHelpers();
 
-describe("MembershipQueries", () => {
-    describe("findUnique / findMany", () => {
+describe("[Queries] - Membership", () => {
+    describe("[Behavior] - scoped reads", () => {
         it.each([
             { name: "no read permission", permissions: [], expected: { $or: [] } },
             {
@@ -33,12 +33,14 @@ describe("MembershipQueries", () => {
                 permissions: [PermissionCode.MEMBERSHIP_READ_ABSOLUTE, PermissionCode.MEMBERSHIP_READ_PERSONAL],
                 expected: {},
             },
-        ])("applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+        ])("[case] - applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+            // Arrange
             const { queries, membershipRepository: repository } = helpers.queries();
             const entity = helpers.createMembership();
             repository.findUniqueOrThrow.mockResolvedValue(entity);
             repository.findMany.mockResolvedValue([[entity], 1]);
 
+            // Act
             await queries.findUnique({
                 mode: QueryMode.DEFAULT,
                 view: ResponseViewType.COMPACT,
@@ -58,17 +60,20 @@ describe("MembershipQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([
                 [expect.objectContaining({ where: { id: ID, ...expected } })],
             ]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: expected })]]);
         });
 
-        it("uses management scope without imposing the caller's membership", async () => {
+        it("[case] - uses management scope without imposing the caller's membership", async () => {
+            // Arrange
             const { queries, membershipRepository: repository } = helpers.queries();
             repository.findMany.mockResolvedValue([[], 0]);
             repository.findUniqueOrThrow.mockResolvedValue(helpers.createMembership());
 
+            // Act
             await queries.findUnique({ mode: QueryMode.MANAGE, view: ResponseViewType.COMPACT, membership: ID });
             await queries.findMany({
                 mode: QueryMode.MANAGE,
@@ -78,6 +83,7 @@ describe("MembershipQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([[expect.objectContaining({ where: { id: ID } })]]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: {} })]]);
         });

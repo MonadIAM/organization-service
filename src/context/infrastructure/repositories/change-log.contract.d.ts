@@ -1,10 +1,5 @@
-declare namespace Repositories {
-    namespace ChangeLog {
-        interface Contract extends Repositories.Base.Contract<
-            SystemEntities.ChangeLog,
-            Repositories.Mappers.ChangeLog.Types
-        > {}
+declare namespace Repositories.ChangeLog {
+    interface Contract extends Repositories.Base.Contract<SystemEntities.ChangeLog, Repositories.Mappers.ChangeLog.Types> {}
 
-        interface QueryContract extends Pick<Contract, "findUniqueOrThrow" | "findMany"> {}
-    }
+    interface QueryContract extends Pick<Contract, "findUniqueOrThrow" | "findMany"> {}
 }

@@ -10,7 +10,7 @@ import { Organization, Project } from "~context/domain/entities";
 
 const helpers = new ProjectIntegrationHelpers();
 
-describe("ProjectService integration", () => {
+describe("[DomainService] - Project", () => {
     const suite = postgresSuite({
         repository: (context) => ({
             ...helpers.service(context),
@@ -20,10 +20,12 @@ describe("ProjectService integration", () => {
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("create / confirmBootstrap / archive", () => {
-        it("creates and archives a project within its organization realm", async () => {
+    describe("[Behavior] - project lifecycle", () => {
+        it("[case] - creates and archives a project within its organization realm", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
 
+            // Act
             const project = await suite.transaction((transaction) =>
                 suite.repository().projectService.create({
                     input: {
@@ -35,7 +37,6 @@ describe("ProjectService integration", () => {
                     transaction,
                 }),
             );
-
             await suite.transaction((transaction) =>
                 suite.repository().projectService.confirmBootstrap({
                     actor: organization.owner.account,
@@ -48,7 +49,6 @@ describe("ProjectService integration", () => {
                     transaction,
                 }),
             );
-
             await suite.transaction((transaction) =>
                 suite.repository().projectService.archive({
                     identifiers: [project.id],
@@ -56,18 +56,21 @@ describe("ProjectService integration", () => {
                     transaction,
                 }),
             );
-
             const loaded = await suite.transaction((transaction) => transaction.findOneOrFail(Project, { id: project.id }));
+
+            // Assert
             expect(loaded.status).toBe("ARCHIVED");
         });
     });
 
-    describe("concurrent project and organization changes", () => {
-        it("rejects project creation after a concurrent organization revoke", async () => {
+    describe("[Behavior] - concurrent project and organization changes", () => {
+        it("[case] - rejects project creation after a concurrent organization revoke", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const existing = await suite.fixtures().createProject({ organization });
             const { organizationService, projectService, concurrency } = suite.repository();
 
+            // Act
             const result = await concurrency.run({
                 first: (transaction) =>
                     organizationService.revoke({
@@ -87,24 +90,28 @@ describe("ProjectService integration", () => {
                         transaction,
                     }),
             });
-
-            expect(result.second.status).toBe("rejected");
-            expect(result.first.realms).toEqual(
-                expect.arrayContaining([{ realm: organization.realm }, { realm: existing.realm }]),
+            const result1 = result.second.status;
+            const result2 = result.first.realms;
+            const result3 = await suite.transaction((transaction) =>
+                transaction.count(Project, { organization: organization.id }),
             );
-            await expect(
-                suite.transaction((transaction) => transaction.count(Project, { organization: organization.id })),
-            ).resolves.toBe(1);
             const loaded = await suite.transaction((transaction) =>
                 transaction.findOneOrFail(Organization, organization.id),
             );
+
+            // Assert
+            expect(result1).toBe("rejected");
+            expect(result2).toEqual(expect.arrayContaining([{ realm: organization.realm }, { realm: existing.realm }]));
+            expect(result3).toBe(1);
             expect(loaded.status).toBe(OrganizationStatus.REVOKED);
         });
 
-        it("rejects organization revoke after concurrent creation starts a project bootstrap", async () => {
+        it("[case] - rejects organization revoke after concurrent creation starts a project bootstrap", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const { organizationService, projectService, concurrency } = suite.repository();
 
+            // Act
             const result = await concurrency.run({
                 first: (transaction) =>
                     projectService.create({
@@ -124,26 +131,29 @@ describe("ProjectService integration", () => {
                         transaction,
                     }),
             });
-
-            expect(result.second).toEqual({
-                status: "rejected",
-                reason: expect.objectContaining({
-                    message: "services.workflow.OPERATION_PENDING",
-                }),
-            });
+            const result1 = result.second;
             const [loaded, project] = await suite.transaction((transaction) =>
                 Promise.all([
                     transaction.findOneOrFail(Organization, organization.id),
                     transaction.findOneOrFail(Project, result.first.id),
                 ]),
             );
+
+            // Assert
+            expect(result1).toEqual({
+                status: "rejected",
+                reason: expect.objectContaining({
+                    message: "services.workflow.OPERATION_PENDING",
+                }),
+            });
             expect(loaded.status).toBe(OrganizationStatus.ACTIVE);
             expect(project.status).toBe(ProjectStatus.PROVISIONING);
         });
 
         it.each(["confirmBootstrap", "rejectBootstrap"] as const)(
-            "collects only existing realms after concurrent %s completes",
+            "[case] - collects only existing realms after concurrent %s completes",
             async (operation) => {
+                // Arrange
                 const organization = await suite.fixtures().createOrganization();
                 const { organizationService, projectService, concurrency } = suite.repository();
                 const project = await suite.transaction((transaction) =>
@@ -158,6 +168,7 @@ describe("ProjectService integration", () => {
                     }),
                 );
 
+                // Act
                 const result = await concurrency.run({
                     first: async (transaction) => {
                         await projectService[operation]({
@@ -180,12 +191,15 @@ describe("ProjectService integration", () => {
                             transaction,
                         }),
                 });
-
                 const realms =
                     operation === "confirmBootstrap"
                         ? [{ realm: organization.realm }, { realm: project.realm }]
                         : [{ realm: organization.realm }];
-                expect(result.second).toEqual({
+                const result1 = result.second;
+                const loaded = await suite.transaction((transaction) => transaction.findOneOrFail(Project, project.id));
+
+                // Assert
+                expect(result1).toEqual({
                     status: "fulfilled",
                     value: {
                         organizations: [
@@ -197,15 +211,15 @@ describe("ProjectService integration", () => {
                         realms,
                     },
                 });
-                const loaded = await suite.transaction((transaction) => transaction.findOneOrFail(Project, project.id));
                 expect(loaded.status).toBe(operation === "confirmBootstrap" ? ProjectStatus.ACTIVE : ProjectStatus.FAILED);
                 expect(loaded.process).toBeNull();
             },
         );
 
         it.each(["confirmBootstrap", "rejectBootstrap"] as const)(
-            "allows %s after a competing revoke is rejected",
+            "[case] - allows %s after a competing revoke is rejected",
             async (operation) => {
+                // Arrange
                 const organization = await suite.fixtures().createOrganization();
                 const { organizationService, projectService, concurrency } = suite.repository();
                 const project = await suite.transaction((transaction) =>
@@ -220,16 +234,18 @@ describe("ProjectService integration", () => {
                     }),
                 );
 
+                // Act
                 const completion = await concurrency.run({
                     first: async (transaction) => {
-                        await expect(
+                        const [result] = await Promise.allSettled([
                             organizationService.revoke({
                                 actor: organization.owner.account,
                                 identifiers: [organization.id],
                                 global: false,
                                 transaction,
                             }),
-                        ).rejects.toThrow("services.workflow.OPERATION_PENDING");
+                        ]);
+                        return result;
                     },
                     second: async (transaction) => {
                         await projectService[operation]({
@@ -254,6 +270,12 @@ describe("ProjectService integration", () => {
                     }),
                 );
 
+                // Assert
+                expect(completion.first.status).toBe("rejected");
+                if (completion.first.status === "rejected") {
+                    expect(completion.first.reason).toBeInstanceOf(Error);
+                    expect(completion.first.reason.message).toContain("services.workflow.OPERATION_PENDING");
+                }
                 expect(completion.second.status).toBe("fulfilled");
                 expect(result.realms).toEqual(
                     operation === "confirmBootstrap"

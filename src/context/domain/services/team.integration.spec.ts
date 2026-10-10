@@ -7,17 +7,19 @@ import { Team } from "~context/domain/entities";
 
 const helpers = new TeamIntegrationHelpers();
 
-describe("TeamService integration", () => {
+describe("[DomainService] - Team", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("create / archive", () => {
-        it("creates and archives a team under an active department", async () => {
+    describe("[Behavior] - team lifecycle", () => {
+        it("[case] - creates and archives a team under an active department", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const department = await suite.fixtures().createDepartment({ organization });
 
+            // Act
             const team = await suite.transaction((transaction) =>
                 suite.repository().teamService.create({
                     input: { department: department.id, name: "Created", description: "Description" },
@@ -28,8 +30,9 @@ describe("TeamService integration", () => {
             await suite.transaction((transaction) =>
                 suite.repository().teamService.archive({ identifiers: [team.id], realm: organization.realm, transaction }),
             );
-
             const loaded = await suite.transaction((transaction) => transaction.findOneOrFail(Team, { id: team.id }));
+
+            // Assert
             expect(loaded.status).toBe("ARCHIVED");
         });
     });

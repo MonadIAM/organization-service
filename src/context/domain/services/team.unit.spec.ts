@@ -12,18 +12,20 @@ const POSITION_ID   = "00000000-0000-4000-8000-100000000004";
 
 const helpers = new TeamUnitHelpers();
 
-describe("TeamService", () => {
+describe("[DomainService] - Team", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("create", () => {
-        it("creates a team in an active department and derives its organization", async () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates a team in an active department and derives its organization", async () => {
+            // Arrange
             const department = helpers.createDepartment({ id: DEPARTMENT_ID });
             const { service, repositories, transaction } = helpers.service({
                 departments: [department],
             });
 
+            // Act
             const result = await service.create({
                 input: {
                     department: DEPARTMENT_ID,
@@ -34,6 +36,7 @@ describe("TeamService", () => {
                 realm: REALM_ID,
             });
 
+            // Assert
             expect(repositories.departments.findUniqueOrThrow).toHaveBeenCalledWith({
                 where: {
                     id: DEPARTMENT_ID,
@@ -48,13 +51,15 @@ describe("TeamService", () => {
         });
     });
 
-    describe("changeLead", () => {
-        it("assigns an HR position as leadPosition", async () => {
+    describe("[Method] - changeLead", () => {
+        it("[case] - assigns an HR position as leadPosition", async () => {
+            // Arrange
             const team = helpers.createTeam({ id: TEAM_ID });
             const { service, transaction } = helpers.service({
                 teams: [team],
             });
 
+            // Act
             await service.changeLead({
                 id: TEAM_ID,
                 position: POSITION_ID,
@@ -62,16 +67,19 @@ describe("TeamService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(team.leadPosition).toBe(POSITION_ID);
         });
     });
 
-    describe("update / changeLead", () => {
-        it("updates team metadata and unassigns its leadPosition", async () => {
+    describe("[Behavior] - metadata and lead changes", () => {
+        it("[case] - updates team metadata and unassigns its leadPosition", async () => {
+            // Arrange
             const team = helpers.createTeam({ id: TEAM_ID });
             team.assignLead({ position: POSITION_ID });
             const { service, transaction } = helpers.service({ teams: [team] });
 
+            // Act
             await service.update({
                 id: TEAM_ID,
                 patch: { name: "Updated" },
@@ -85,58 +93,65 @@ describe("TeamService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(team.name).toBe("Updated");
             expect(team.leadPosition).toBeUndefined();
         });
     });
 
-    describe("archive / restore", () => {
-        it("deduplicates archive identifiers and rejects incomplete results", async () => {
+    describe("[Behavior] - archive lifecycle", () => {
+        it("[case] - deduplicates archive identifiers and rejects incomplete results", async () => {
+            // Arrange
             const team = helpers.createTeam({ id: TEAM_ID });
             const { service, repositories, transaction } = helpers.service({
                 teams: [team],
             });
 
+            // Act
             await service.archive({
                 identifiers: [TEAM_ID, TEAM_ID],
                 realm: REALM_ID,
                 transaction: transaction.entityManager,
             });
-
-            expect(repositories.teams.find).toHaveBeenCalledWith({
-                where: {
-                    id: { $in: [TEAM_ID] },
-                    organization: { realm: REALM_ID },
-                },
+            const calls = repositories.teams.find.mock.calls.slice();
+            repositories.teams.find.mockImplementation(() => Promise.resolve([]));
+            const result = service.restore({
+                identifiers: [TEAM_ID],
+                realm: REALM_ID,
                 transaction: transaction.entityManager,
             });
 
-            repositories.teams.find.mockImplementation(() => Promise.resolve([]));
-
-            await expect(
-                service.restore({
-                    identifiers: [TEAM_ID],
-                    realm: REALM_ID,
+            // Assert
+            expect(calls).toContainEqual([
+                {
+                    where: {
+                        id: { $in: [TEAM_ID] },
+                        organization: { realm: REALM_ID },
+                    },
                     transaction: transaction.entityManager,
-                }),
-            ).rejects.toThrow("services.team.TEAMS_NOT_FOUND");
+                },
+            ]);
+            await expect(result).rejects.toThrow("services.team.TEAMS_NOT_FOUND");
         });
     });
 
-    describe("purge", () => {
-        it("purges archived teams", async () => {
+    describe("[Method] - purge", () => {
+        it("[case] - purges archived teams", async () => {
+            // Arrange
             const team = helpers.createTeam({
                 id: TEAM_ID,
                 status: TeamStatus.ARCHIVED,
             });
             const { service, transaction } = helpers.service({ teams: [team] });
 
+            // Act
             await service.purge({
                 identifiers: [TEAM_ID],
                 realm: REALM_ID,
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(transaction.remove).toHaveBeenCalledWith(team);
         });
     });

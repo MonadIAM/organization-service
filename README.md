@@ -1,7 +1,6 @@
 # @monadiam/organization-service
 
-Organization Service manages organizations, projects, departments, teams,
-organization memberships, scoped account assignments, and invitations.
+IAM/HRM | Organizations: organization lifecycle, departments, teams, projects, memberships, project account assignments and invitations.
 
 ----
 

@@ -9,8 +9,8 @@ const ID = "entity-a";
 const PAGINATION: Pagination = { currentPage: 2, elementsPerPage: 10 };
 const helpers = new InviteQueriesUnitHelpers();
 
-describe("InviteQueries", () => {
-    describe("findUnique / findMany", () => {
+describe("[Queries] - Invite", () => {
+    describe("[Behavior] - scoped reads", () => {
         it.each([
             { name: "no read permission", permissions: [], paged: { $or: [] }, expected: { $or: [] } },
             {
@@ -39,12 +39,14 @@ describe("InviteQueries", () => {
                 paged: {},
                 expected: {},
             },
-        ])("applies $name visibility to single and paged reads", async ({ permissions, expected, paged }) => {
+        ])("[case] - applies $name visibility to single and paged reads", async ({ permissions, expected, paged }) => {
+            // Arrange
             const { queries, inviteRepository: repository } = helpers.queries();
             const entity = helpers.createInvite();
             repository.findUniqueOrThrow.mockResolvedValue(entity);
             repository.findMany.mockResolvedValue([[entity], 1]);
 
+            // Act
             await queries.findUnique({
                 mode: QueryMode.DEFAULT,
                 view: ResponseViewType.COMPACT,
@@ -65,17 +67,20 @@ describe("InviteQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([
                 [expect.objectContaining({ where: { id: ID, ...expected } })],
             ]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: paged })]]);
         });
 
-        it("uses management scope without imposing the caller's membership", async () => {
+        it("[case] - uses management scope without imposing the caller's membership", async () => {
+            // Arrange
             const { queries, inviteRepository: repository } = helpers.queries();
             repository.findMany.mockResolvedValue([[], 0]);
             repository.findUniqueOrThrow.mockResolvedValue(helpers.createInvite());
 
+            // Act
             await queries.findUnique({ mode: QueryMode.MANAGE, view: ResponseViewType.COMPACT, invite: ID });
             await queries.findMany({
                 mode: QueryMode.MANAGE,
@@ -85,19 +90,22 @@ describe("InviteQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([[expect.objectContaining({ where: { id: ID } })]]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: {} })]]);
         });
     });
 
-    describe("findMany", () => {
+    describe("[Method] - findMany", () => {
         it.each([
             { scope: InviteQueryScope.AS_INVITER, expected: { inviter: ACTOR } },
             { scope: InviteQueryScope.AS_INVITEE, expected: { invitee: ACTOR } },
-        ])("limits personal invitations to $scope", async ({ scope, expected }) => {
+        ])("[case] - limits personal invitations to $scope", async ({ scope, expected }) => {
+            // Arrange
             const { queries, inviteRepository } = helpers.queries();
             inviteRepository.findMany.mockResolvedValue([[], 0]);
 
+            // Act
             await queries.findMany({
                 mode: QueryMode.DEFAULT,
                 actor: ACTOR,
@@ -110,6 +118,7 @@ describe("InviteQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(inviteRepository.findMany.mock.calls).toEqual([
                 [expect.objectContaining({ prefilter: { $or: [expected] } })],
             ]);

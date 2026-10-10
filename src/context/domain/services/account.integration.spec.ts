@@ -16,14 +16,15 @@ import {
 
 const helpers = new AccountIntegrationHelpers();
 
-describe("AccountService integration", () => {
+describe("[DomainService] - Account", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("purge", () => {
-        it("purges owned organization graphs and only the account's links in foreign organizations", async () => {
+    describe("[Method] - purge", () => {
+        it("[case] - purges owned organization graphs and only the account's links in foreign organizations", async () => {
+            // Arrange
             const account = randomUUID();
             const owned = await suite.fixtures().createOrganization({ ownerAccount: account });
             const foreign = await suite.fixtures().createOrganization();
@@ -48,38 +49,38 @@ describe("AccountService integration", () => {
             await suite.fixtures().createInvite({ organization: foreign, inviter: account });
             const untouchedInvite = await suite.fixtures().createInvite({ organization: foreign });
 
+            // Act
             const result = await suite.transaction((transaction) =>
                 suite.repository().accountService.purge({ account, transaction }),
             );
-
-            expect(result.realms.map(({ realm }) => realm).sort()).toEqual([owned.realm, project.realm].sort());
-            expect(result.access.map(({ realm }) => realm).sort()).toEqual(
-                [foreign.realm, foreignProject.realm, unrelatedProject.realm].sort(),
+            const result1 = result.realms.map(({ realm }) => realm).sort();
+            const result2 = result.access.map(({ realm }) => realm).sort();
+            const result3 = await suite.transaction((transaction) =>
+                Promise.all([
+                    transaction.count(Organization, { id: owned.id }),
+                    transaction.count(Membership, { organization: owned.id }),
+                    transaction.count(Project, { organization: owned.id }),
+                    transaction.count(Department, { organization: owned.id }),
+                    transaction.count(Team, { organization: owned.id }),
+                    transaction.count(Invite, { organization: owned.id }),
+                    transaction.count(ProjectAccountAssignment, { organization: owned.id }),
+                    transaction.count(Membership, { account }),
+                    transaction.count(ProjectAccountAssignment, { membership: { id: membership.id } }),
+                ]),
             );
-            await expect(
-                suite.transaction((transaction) =>
-                    Promise.all([
-                        transaction.count(Organization, { id: owned.id }),
-                        transaction.count(Membership, { organization: owned.id }),
-                        transaction.count(Project, { organization: owned.id }),
-                        transaction.count(Department, { organization: owned.id }),
-                        transaction.count(Team, { organization: owned.id }),
-                        transaction.count(Invite, { organization: owned.id }),
-                        transaction.count(ProjectAccountAssignment, { organization: owned.id }),
-                        transaction.count(Membership, { account }),
-                        transaction.count(ProjectAccountAssignment, { membership: { id: membership.id } }),
-                    ]),
-                ),
-            ).resolves.toEqual(Array(9).fill(0));
-            await expect(
-                suite.transaction((transaction) => transaction.count(Organization, { id: foreign.id })),
-            ).resolves.toBe(1);
-            await expect(
-                suite.transaction((transaction) => transaction.count(Invite, { id: untouchedInvite.id })),
-            ).resolves.toBe(1);
+            const result4 = await suite.transaction((transaction) => transaction.count(Organization, { id: foreign.id }));
+            const result5 = await suite.transaction((transaction) => transaction.count(Invite, { id: untouchedInvite.id }));
+
+            // Assert
+            expect(result1).toEqual([owned.realm, project.realm].sort());
+            expect(result2).toEqual([foreign.realm, foreignProject.realm, unrelatedProject.realm].sort());
+            expect(result3).toEqual(Array(9).fill(0));
+            expect(result4).toBe(1);
+            expect(result5).toBe(1);
         });
 
-        it("rejects cleanup while ownership is being transferred to the account", async () => {
+        it("[case] - rejects cleanup while ownership is being transferred to the account", async () => {
+            // Arrange
             const account = randomUUID();
             const organization = await suite.fixtures().createOrganization();
             const membership = await suite.fixtures().createMembership({ organization, account });
@@ -89,19 +90,24 @@ describe("AccountService integration", () => {
                 entity.beginTransfer(candidate);
             });
 
-            await expect(
-                suite.transaction((transaction) => suite.repository().accountService.purge({ account, transaction })),
-            ).rejects.toThrow("services.account.TRANSFER_PENDING");
+            // Act
+            const result = suite.transaction((transaction) =>
+                suite.repository().accountService.purge({ account, transaction }),
+            );
+            await Promise.allSettled([result]);
+            const result1 = await suite.transaction((transaction) => transaction.count(Membership, { id: membership.id }));
+            const result2 = await suite.transaction((transaction) =>
+                transaction.count(Organization, { id: organization.id }),
+            );
 
-            await expect(
-                suite.transaction((transaction) => transaction.count(Membership, { id: membership.id })),
-            ).resolves.toBe(1);
-            await expect(
-                suite.transaction((transaction) => transaction.count(Organization, { id: organization.id })),
-            ).resolves.toBe(1);
+            // Assert
+            await expect(result).rejects.toThrow("services.account.TRANSFER_PENDING");
+            expect(result1).toBe(1);
+            expect(result2).toBe(1);
         });
 
-        it("rejects cleanup during a project bootstrap without deleting owned data", async () => {
+        it("[case] - rejects cleanup during a project bootstrap without deleting owned data", async () => {
+            // Arrange
             const account = randomUUID();
             const organization = await suite.fixtures().createOrganization({ ownerAccount: account });
             const project = await suite.fixtures().createProject({ organization });
@@ -110,18 +116,21 @@ describe("AccountService integration", () => {
                 entity.beginBootstrap();
             });
 
-            await expect(
-                suite.transaction((transaction) => suite.repository().accountService.purge({ account, transaction })),
-            ).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
+            // Act
+            const result = suite.transaction((transaction) =>
+                suite.repository().accountService.purge({ account, transaction }),
+            );
+            await Promise.allSettled([result]);
+            const result1 = await suite.transaction((transaction) =>
+                Promise.all([
+                    transaction.count(Organization, { id: organization.id }),
+                    transaction.count(Project, { id: project.id }),
+                ]),
+            );
 
-            await expect(
-                suite.transaction((transaction) =>
-                    Promise.all([
-                        transaction.count(Organization, { id: organization.id }),
-                        transaction.count(Project, { id: project.id }),
-                    ]),
-                ),
-            ).resolves.toEqual([1, 1]);
+            // Assert
+            await expect(result).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
+            expect(result1).toEqual([1, 1]);
         });
     });
 });

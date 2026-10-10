@@ -2,10 +2,10 @@ import { InjectEntityManager } from "@mikro-orm/nestjs";
 import { Injectable, Scope } from "@nestjs/common";
 import { raw } from "@mikro-orm/postgresql";
 
-import { ExceptionMapper } from "~common/exceptions";
-import { BaseRepository } from "~common/mixins";
 import { Organization } from "~context/domain/entities";
+import { ExceptionMapper } from "~common/exceptions";
 import { kysely } from "~infrastructure/database";
+import { BaseRepository } from "~common/mixins";
 
 import { OrganizationMapper } from "../mappers";
 

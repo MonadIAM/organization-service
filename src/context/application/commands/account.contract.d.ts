@@ -1,17 +1,18 @@
-declare namespace Commands {
-    namespace Account {
-        interface Contract extends ConsumerContract {}
+declare namespace Commands.Account {
+    interface Contract extends ConsumerContract {}
 
-        interface ConsumerContract {
-            purge: Purge.Signature;
-        }
+    interface ConsumerContract {
+        purge: Purge.Signature;
+    }
 
-        namespace Purge {
-            type Props = { account: string; incoming: TransactionManager.Service.IncomingMessage };
+    namespace Purge {
+        type Props = {
+            incoming: TransactionManager.Service.IncomingMessage;
+            account: string;
+        };
 
-            type Result = Promise<void>;
+        type Result = Promise<void>;
 
-            type Signature = (props: Props) => Result;
-        }
+        type Signature = (props: Props) => Result;
     }
 }

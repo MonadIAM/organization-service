@@ -9,8 +9,8 @@ const ID = "entity-a";
 const PAGINATION: Pagination = { currentPage: 2, elementsPerPage: 10 };
 const helpers = new ProjectAccountAssignmentQueriesUnitHelpers();
 
-describe("ProjectAccountAssignmentQueries", () => {
-    describe("findUnique / findMany", () => {
+describe("[Queries] - ProjectAccountAssignment", () => {
+    describe("[Behavior] - scoped reads", () => {
         it.each([
             { name: "no read permission", permissions: [], expected: { $or: [] } },
             {
@@ -44,12 +44,14 @@ describe("ProjectAccountAssignmentQueries", () => {
                 ],
                 expected: {},
             },
-        ])("applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+        ])("[case] - applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+            // Arrange
             const { queries, projectAccountAssignmentRepository: repository } = helpers.queries();
             const entity = helpers.createProjectAccountAssignment();
             repository.findUniqueOrThrow.mockResolvedValue(entity);
             repository.findMany.mockResolvedValue([[entity], 1]);
 
+            // Act
             await queries.findUnique({
                 mode: QueryMode.DEFAULT,
                 view: ResponseViewType.COMPACT,
@@ -69,17 +71,20 @@ describe("ProjectAccountAssignmentQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([
                 [expect.objectContaining({ where: { id: ID, ...expected } })],
             ]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: expected })]]);
         });
 
-        it("uses management scope without imposing the caller's membership", async () => {
+        it("[case] - uses management scope without imposing the caller's membership", async () => {
+            // Arrange
             const { queries, projectAccountAssignmentRepository: repository } = helpers.queries();
             repository.findMany.mockResolvedValue([[], 0]);
             repository.findUniqueOrThrow.mockResolvedValue(helpers.createProjectAccountAssignment());
 
+            // Act
             await queries.findUnique({ mode: QueryMode.MANAGE, view: ResponseViewType.COMPACT, assignment: ID });
             await queries.findMany({
                 mode: QueryMode.MANAGE,
@@ -89,6 +94,7 @@ describe("ProjectAccountAssignmentQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([[expect.objectContaining({ where: { id: ID } })]]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: {} })]]);
         });

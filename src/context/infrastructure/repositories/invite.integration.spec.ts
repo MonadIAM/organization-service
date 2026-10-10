@@ -8,20 +8,23 @@ import { InviteStatus } from "~context/enums";
 
 import { InviteRepository } from "./invite.repository";
 
-describe("InviteRepository", () => {
+describe("[Repository] - Invite", () => {
     const suite = postgresSuite({
         repository: ({ readManager, writeManager }) => new InviteRepository(readManager, writeManager),
         fixture: (entityManager) => new InviteFixture(entityManager),
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("maps the persisted invite through the schema", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - maps the persisted invite through the schema", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const expiresAt = new Date("2030-01-01T00:00:00.000Z");
             const invite = await suite.fixtures().createInvite({ organization, expiresAt });
 
+            // Act
             const loaded = await suite.repository().findUniqueOrThrow({ where: { id: invite.id } });
 
+            // Assert
             expect(loaded).toMatchObject({
                 status: InviteStatus.PENDING,
                 createdAt: invite.createdAt,
@@ -36,10 +39,12 @@ describe("InviteRepository", () => {
         });
     });
 
-    describe("findMany", () => {
-        it("finds invites by organization, invitee and status mapper filters", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds invites by organization, invitee and status mapper filters", async () => {
+            // Arrange
             const { organization, matched } = await suite.fixtures().filterScenario();
 
+            // Act
             const [invites, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 sort: { createdAt: QueryOrder.ASC },
@@ -49,21 +54,26 @@ describe("InviteRepository", () => {
                     status: { operator: PublicStringOperator.EQUAL, value: InviteStatus.PENDING },
                 },
             });
+            const result = total;
+            const result1 = invites.map(({ id }) => id);
 
-            expect(total).toBe(1);
-            expect(invites.map(({ id }) => id)).toEqual([matched.id]);
+            // Assert
+            expect(result).toBe(1);
+            expect(result1).toEqual([matched.id]);
         });
     });
 
-    describe("findExpiredPending", () => {
-        it("finds only expired pending invites", async () => {
+    describe("[Method] - findExpiredPending", () => {
+        it("[case] - finds only expired pending invites", async () => {
+            // Arrange
             const { expirationDate, expired } = await suite.fixtures().expirationScenario();
 
+            // Act
             const invites = await suite.repository().findExpiredPending({ expirationDate, batchSize: 10 });
+            const result = invites.map(({ id, expiresAt }) => ({ id, expiresAt }));
 
-            expect(invites.map(({ id, expiresAt }) => ({ id, expiresAt }))).toEqual([
-                { id: expired.id, expiresAt: expired.expiresAt },
-            ]);
+            // Assert
+            expect(result).toEqual([{ id: expired.id, expiresAt: expired.expiresAt }]);
         });
     });
 });

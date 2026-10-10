@@ -31,28 +31,35 @@ function createInvite(props: Partial<Entities.Invite.ConstructorProps> = {}): In
     });
 }
 
-describe("Invite Entity", () => {
-    describe("constructor", () => {
-        it("should initialize a pending invite", () => {
+describe("[Entity] - Invite", () => {
+    describe("[Method] - constructor", () => {
+        it("[case] - initializes a pending invite", () => {
+            // Arrange
+
+            // Act
             const invite = createInvite();
 
+            // Assert
             expect(invite.status).toBe(InviteStatus.PENDING);
             expect(invite.expiresAt).toBe(EXPIRES_AT);
             expect(invite.updatedAt).toBeUndefined();
         });
     });
 
-    describe("state transitions", () => {
+    describe("[Behavior] - state transitions", () => {
         it.each([
             ["accept", InviteStatus.ACCEPTED],
             ["decline", InviteStatus.DECLINED],
             ["cancel", InviteStatus.CANCELLED],
             ["invalidate", InviteStatus.INVALIDATED],
-        ] as const)("should %s an unexpired pending invite", (method, status) => {
+        ] as const)("[case] - %s an unexpired pending invite", (method, status) => {
+            // Arrange
             const invite = createInvite();
 
+            // Act
             invite[method](BEFORE_EXPIRATION);
 
+            // Assert
             expect(invite.status).toBe(status);
             expect(invite.updatedAt).toBe(BEFORE_EXPIRATION);
         });
@@ -62,37 +69,54 @@ describe("Invite Entity", () => {
             { method: "decline", error: "CANNOT_DECLINE_EXPIRED" },
             { method: "cancel", error: "CANNOT_CANCEL_EXPIRED" },
             { method: "invalidate", error: "CANNOT_INVALIDATE_EXPIRED" },
-        ] as const)("should reject $method at the expiration deadline", ({ method, error }) => {
+        ] as const)("[case] - rejects $method at the expiration deadline", ({ method, error }) => {
+            // Arrange
             const invite = createInvite();
 
-            expect(() => invite[method](EXPIRES_AT)).toThrow(error);
+            // Act
+            const act = (): unknown => invite[method](EXPIRES_AT);
+
+            // Assert
+            expect(act).toThrow(error);
         });
 
-        it("should reject a second terminal transition", () => {
+        it("[case] - rejects a second terminal transition", () => {
+            // Arrange
             const invite = createInvite();
             invite.accept(BEFORE_EXPIRATION);
 
-            expect(() => invite.cancel(BEFORE_EXPIRATION)).toThrow("CANNOT_CANCEL_INACTIVE");
-            expect(() => invite.expire(EXPIRES_AT)).toThrow("CANNOT_EXPIRE_INACTIVE");
+            // Act
+            const act = (): unknown => invite.cancel(BEFORE_EXPIRATION);
+            const act1 = (): unknown => invite.expire(EXPIRES_AT);
+
+            // Assert
+            expect(act).toThrow("CANNOT_CANCEL_INACTIVE");
+            expect(act1).toThrow("CANNOT_EXPIRE_INACTIVE");
         });
     });
 
-    describe("accept", () => {
-        it("should allow an invite without expiresAt to finish", () => {
+    describe("[Method] - accept", () => {
+        it("[case] - allows an invite without expiresAt to finish", () => {
+            // Arrange
             const invite = createInvite({ expiresAt: undefined });
 
+            // Act
             invite.accept(BEFORE_EXPIRATION);
 
+            // Assert
             expect(invite.status).toBe(InviteStatus.ACCEPTED);
         });
     });
 
-    describe("expire", () => {
-        it("should expire a pending invite when its deadline is reached", () => {
+    describe("[Method] - expire", () => {
+        it("[case] - expires a pending invite when its deadline is reached", () => {
+            // Arrange
             const invite = createInvite();
 
+            // Act
             invite.expire(EXPIRES_AT);
 
+            // Assert
             expect(invite.status).toBe(InviteStatus.EXPIRED);
             expect(invite.updatedAt).toBe(EXPIRES_AT);
         });
@@ -100,31 +124,44 @@ describe("Invite Entity", () => {
         it.each([
             { scenario: "before its deadline", expiresAt: EXPIRES_AT },
             { scenario: "without a deadline", expiresAt: undefined },
-        ])("should reject expiring an invite $scenario", ({ expiresAt }) => {
+        ])("[case] - rejects expiring an invite $scenario", ({ expiresAt }) => {
+            // Arrange
             const invite = createInvite({ expiresAt });
 
-            expect(() => invite.expire(BEFORE_EXPIRATION)).toThrow("CANNOT_EXPIRE_UNDUE");
+            // Act
+            const act = (): unknown => invite.expire(BEFORE_EXPIRATION);
+
+            // Assert
+            expect(act).toThrow("CANNOT_EXPIRE_UNDUE");
         });
     });
 
-    describe("confirmAccept", () => {
-        it("rejects completion of an invitation that is not being accepted", () => {
+    describe("[Method] - confirmAccept", () => {
+        it("[case] - rejects completion of an invitation that is not being accepted", () => {
+            // Arrange
             const invite = createInvite();
 
-            expect(() => invite.confirmAccept()).toThrow("entities.invite.OPERATION_CONFLICT");
+            // Act
+            const act = (): unknown => invite.confirmAccept();
 
+            // Assert
+            expect(act).toThrow("entities.invite.OPERATION_CONFLICT");
             expect(invite.status).toBe(InviteStatus.PENDING);
         });
     });
 
-    describe("rejectAccept", () => {
-        it("rejects late acceptance failure after confirmation", () => {
+    describe("[Method] - rejectAccept", () => {
+        it("[case] - rejects late acceptance failure after confirmation", () => {
+            // Arrange
             const invite = createInvite();
             invite.beginAccept("process");
             invite.confirmAccept();
 
-            expect(() => invite.rejectAccept("late rejection")).toThrow("entities.invite.OPERATION_CONFLICT");
+            // Act
+            const act = (): unknown => invite.rejectAccept("late rejection");
 
+            // Assert
+            expect(act).toThrow("entities.invite.OPERATION_CONFLICT");
             expect(invite.status).toBe(InviteStatus.ACCEPTED);
         });
     });

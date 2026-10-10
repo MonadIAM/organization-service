@@ -7,15 +7,18 @@ import { InviteMapper } from "./invite.mapper";
 const helpers = new EntityFactoryRegistry();
 const mapper = new InviteMapper();
 
-describe("InviteMapper", () => {
-    describe("joinPayload", () => {
-        it.each(["selected-role", undefined])("maps invitation acceptance with role %s", (role) => {
+describe("[DataMapper] - Invite", () => {
+    describe("[Method] - joinPayload", () => {
+        it.each(["selected-role", undefined])("[case] - maps invitation acceptance with role %s", (role) => {
+            // Arrange
             const invite = helpers.createInvite({ role });
             const membership = helpers.createMembership({ organization: invite.organization, account: invite.invitee });
             membership.beginJoin();
 
+            // Act
             const payload = mapper.joinPayload({ invite, membership });
 
+            // Assert
             expect(payload.actor).toBe(invite.inviter);
             expect(payload.input.role).toBe(role);
             expect(payload.input.invite).toBe(invite.id);
@@ -24,12 +27,15 @@ describe("InviteMapper", () => {
         });
     });
 
-    describe("notificationPayload", () => {
-        it("provides all invitation template parameters and a stable deduplication key", () => {
+    describe("[Method] - notificationPayload", () => {
+        it("[case] - provides all invitation template parameters and a stable deduplication key", () => {
+            // Arrange
             const invite = helpers.createInvite();
 
+            // Act
             const payload = mapper.notificationPayload(invite);
 
+            // Assert
             expect(payload.input).toEqual(
                 expect.objectContaining({
                     dedupKey: `invite:${invite.id}`,

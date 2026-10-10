@@ -6,20 +6,22 @@ import { CoreFixture } from "~testing/integration/repositories/core.fixture";
 import { InboxService } from "./inbox.service";
 import { Inbox } from "../entities";
 
-describe("InboxService integration", () => {
+describe("[CommonService] - Inbox", () => {
     const suite = postgresSuite({
         repository: () => new InboxService(),
         fixture: (entityManager) => new CoreFixture(entityManager),
     });
 
-    describe("claim", () => {
-        it("claims an event once per consumer", async () => {
+    describe("[Method] - claim", () => {
+        it("[case] - claims an event once per consumer", async () => {
+            // Arrange
             const incoming: TransactionManager.Service.IncomingMessage = {
                 consumerKey: "organization.placeholder.v1",
                 event: "event-1",
                 source: { topic: "source-topic", partition: 2, offset: "42" },
             };
 
+            // Act
             const first = await suite.transaction((transaction) => suite.repository().claim({ transaction, incoming }));
             const duplicate = await suite.transaction((transaction) => suite.repository().claim({ transaction, incoming }));
             const anotherConsumer = await suite.transaction((transaction) =>
@@ -28,11 +30,11 @@ describe("InboxService integration", () => {
                     incoming: { ...incoming, consumerKey: "another-consumer.v1" },
                 }),
             );
-
             const rows = await suite.transaction((transaction) =>
                 transaction.find(Inbox, {}, { orderBy: { consumerKey: "asc" } }),
             );
 
+            // Assert
             expect(first).toBe(true);
             expect(duplicate).toBe(false);
             expect(anotherConsumer).toBe(true);
@@ -43,10 +45,10 @@ describe("InboxService integration", () => {
         });
     });
 
-    describe("clean", () => {
-        it("cleans one expired batch and keeps fresh entries", async () => {
+    describe("[Method] - clean", () => {
+        it("[case] - cleans one expired batch and keeps fresh entries", async () => {
+            // Arrange
             const events = ["expired-1", "expired-2", "expired-3", "fresh"];
-
             for await (const event of events) {
                 await suite.transaction((transaction) =>
                     suite.repository().claim({
@@ -55,7 +57,6 @@ describe("InboxService integration", () => {
                     }),
                 );
             }
-
             await suite.transaction(async (transaction) => {
                 const rows = await transaction.find(Inbox, {});
                 for (const row of rows) {
@@ -66,6 +67,7 @@ describe("InboxService integration", () => {
                 }
             });
 
+            // Act
             const cleaned = await suite.transaction((transaction) =>
                 suite.repository().clean({
                     expirationDate: new Date("2026-02-01T00:00:00.000Z"),
@@ -76,9 +78,12 @@ describe("InboxService integration", () => {
             const remaining = await suite.transaction((transaction) =>
                 transaction.find(Inbox, {}, { orderBy: { processedAt: "asc" } }),
             );
+            const result = cleaned;
+            const result1 = remaining.map(({ event }) => event);
 
-            expect(cleaned).toBe(2);
-            expect(remaining.map(({ event }) => event)).toEqual(["expired-3", "fresh"]);
+            // Assert
+            expect(result).toBe(2);
+            expect(result1).toEqual(["expired-3", "fresh"]);
         });
     });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@monadiam/organization-service",
-  "description": "MonadIAM service for organizations, projects, departments, teams, memberships, scoped assignments, and invitations.",
+  "description": "IAM/HRM | Organizations: organization lifecycle, departments, teams, projects, memberships, project account assignments and invitations.",
   "author": "Daniil Egorov (https://github.com/Lambdius)",
   "license": "SEE LICENSE IN LICENSE",
   "version": "0.0.1",

@@ -11,14 +11,15 @@ import { EntityType } from "~context/enums";
 
 import { ChangeLogRepository } from "./change-log.repository";
 
-describe("ChangeLogRepository", () => {
+describe("[Repository] - ChangeLog", () => {
     const suite = postgresSuite({
         repository: ({ readManager }) => new ChangeLogRepository(readManager),
         fixture: (entityManager) => new CoreFixture(entityManager),
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("maps the persisted change log entry through the schema", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - maps the persisted change log entry through the schema", async () => {
+            // Arrange
             const entity = randomUUID();
             const changeLog = await suite.fixtures().createChangeLog({
                 delta: new DeltaChanges({ name: { old: "Old Name", new: "New Name" } }),
@@ -27,7 +28,11 @@ describe("ChangeLogRepository", () => {
                 entity,
             });
 
-            await expect(suite.repository().findUniqueOrThrow({ where: { id: changeLog.id } })).resolves.toMatchObject({
+            // Act
+            const result = await suite.repository().findUniqueOrThrow({ where: { id: changeLog.id } });
+
+            // Assert
+            expect(result).toMatchObject({
                 delta: new DeltaChanges({ name: { old: "Old Name", new: "New Name" } }),
                 auditEntry: changeLog.auditEntry,
                 changeType: ChangeSetType.UPDATE,
@@ -40,18 +45,24 @@ describe("ChangeLogRepository", () => {
             });
         });
 
-        it("persists a joined composite entity id in the text column", async () => {
+        it("[case] - persists a joined composite entity id in the text column", async () => {
+            // Arrange
             const entity = `${randomUUID()}:${randomUUID()}:1`;
             const changeLog = await suite.fixtures().createChangeLog({ entity });
 
-            await expect(suite.repository().findUniqueOrThrow({ where: { id: changeLog.id } })).resolves.toMatchObject({
+            // Act
+            const result = await suite.repository().findUniqueOrThrow({ where: { id: changeLog.id } });
+
+            // Assert
+            expect(result).toMatchObject({
                 entity,
             });
         });
     });
 
-    describe("findMany", () => {
-        it("finds change log entries by change type and entity mapper filters", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds change log entries by change type and entity mapper filters", async () => {
+            // Arrange
             const matched = await suite.fixtures().createChangeLog({
                 changeType: ChangeSetType.CREATE,
                 entityType: EntityType.ORGANIZATION,
@@ -61,6 +72,7 @@ describe("ChangeLogRepository", () => {
                 entityType: EntityType.ORGANIZATION,
             });
 
+            // Act
             const [entries, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 sort: { createdAt: QueryOrder.ASC },
@@ -75,9 +87,12 @@ describe("ChangeLogRepository", () => {
                     },
                 },
             });
+            const result = total;
+            const result1 = entries.map(({ id }) => id);
 
-            expect(total).toBe(1);
-            expect(entries.map(({ id }) => id)).toEqual([matched.id]);
+            // Assert
+            expect(result).toBe(1);
+            expect(result1).toEqual([matched.id]);
         });
     });
 });

@@ -11,16 +11,19 @@ const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const INCOMING: TransactionManager.Service.IncomingMessage = { consumerKey: "unit-consumer", event: "incoming-event" };
 const helpers = new OrganizationCommandsUnitHelpers();
 
-describe("OrganizationCommands", () => {
-    describe("create", () => {
-        it("creates in a transaction with the required ownership scope", async () => {
+describe("[Commands] - Organization", () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates in a transaction with the required ownership scope", async () => {
+            // Arrange
             const { commands, organizationService, transaction, run } = helpers.commands();
             const input = { title: "New organization", description: "Description" };
             const created = { organization: helpers.createOrganization(), membership: helpers.createMembership() };
             organizationService.create.mockReturnValue(created);
 
+            // Act
             await commands.create({ input, actor: ACTOR, context: CONTEXT });
 
+            // Assert
             expect(organizationService.create.mock.calls).toEqual([
                 [{ input, transaction: transaction.entityManager, actor: ACTOR }],
             ]);
@@ -30,7 +33,7 @@ describe("OrganizationCommands", () => {
         });
     });
 
-    describe("revoke / restore / purge", () => {
+    describe("[Behavior] - revocation lifecycle", () => {
         it.each([
             { method: "revoke", count: 1, global: false },
             { method: "revoke", count: 2, global: false },
@@ -40,21 +43,28 @@ describe("OrganizationCommands", () => {
             { method: "restore", count: 1, global: true },
             { method: "purge", count: 1, global: true },
         ] as const)(
-            "$method forwards global=$global and reports $count changed entities",
+            "[case] - $method forwards global=$global and reports $count changed entities",
             async ({ method, count, global }) => {
+                // Arrange
                 const { commands, organizationService, transaction, run } = helpers.commands();
                 const entities = Array.from({ length: count }, () => helpers.createOrganization());
                 const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
                 organizationService[method].mockResolvedValue({ organizations: entities, realms: [{ realm: REALM }] });
 
+                // Act
                 const result = await commands[method]({ input, actor: ACTOR, context: CONTEXT, global });
+                const result2 = organizationService[method].mock.calls;
+                const result4 = result.params;
+                const calls5 = run.mock.calls.slice();
+                const result6 = await run.mock.results[0]?.value;
 
-                expect(organizationService[method].mock.calls).toEqual([
+                // Assert
+                expect(result2).toEqual([
                     [{ identifiers: input.identifiers, actor: ACTOR, global, transaction: transaction.entityManager }],
                 ]);
-                expect(result.params).toEqual(count > 1 ? { count } : undefined);
-                expect(run).toHaveBeenCalledTimes(1);
-                await expect(run.mock.results[0]?.value).resolves.toEqual({
+                expect(result4).toEqual(count > 1 ? { count } : undefined);
+                expect(calls5).toHaveLength(1);
+                expect(result6).toEqual({
                     ...{ organizations: entities, realms: [{ realm: REALM }] },
                     actor: ACTOR,
                 });
@@ -77,38 +87,45 @@ describe("OrganizationCommands", () => {
         );
     });
 
-    describe("update", () => {
-        it("updates only the patch within the requested realm", async () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates only the patch within the requested realm", async () => {
+            // Arrange
             const { commands, organizationService, transaction } = helpers.commands();
             const input = { patch: { title: "Renamed" }, reason: "Correction" };
 
+            // Act
             await commands.update({ input, id: ID, realm: REALM, actor: ACTOR, context: CONTEXT });
 
+            // Assert
             expect(organizationService.update.mock.calls).toEqual([
                 [{ patch: input.patch, id: ID, realm: REALM, transaction: transaction.entityManager }],
             ]);
         });
     });
 
-    describe("revoke", () => {
-        it("propagates a domain failure through the transaction", async () => {
+    describe("[Method] - revoke", () => {
+        it("[case] - propagates a domain failure through the transaction", async () => {
+            // Arrange
             const { commands, organizationService } = helpers.commands();
             const failure = new Error("domain rejected mutation");
             organizationService.revoke.mockRejectedValue(failure);
 
-            await expect(
-                commands.revoke({
-                    global: false,
-                    input: { identifiers: [ID], reason: "Requested change" },
-                    actor: ACTOR,
-                    context: CONTEXT,
-                }),
-            ).rejects.toBe(failure);
+            // Act
+            const result = commands.revoke({
+                global: false,
+                input: { identifiers: [ID], reason: "Requested change" },
+                actor: ACTOR,
+                context: CONTEXT,
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(failure);
         });
     });
 
-    describe("confirmBootstrap", () => {
-        it("consumes confirmBootstrap with the original process and transaction", async () => {
+    describe("[Method] - confirmBootstrap", () => {
+        it("[case] - consumes confirmBootstrap with the original process and transaction", async () => {
+            // Arrange
             const { commands, organizationService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -117,8 +134,10 @@ describe("OrganizationCommands", () => {
             };
             organizationService.confirmBootstrap.mockResolvedValue({ realms: [] });
 
+            // Act
             await commands.confirmBootstrap({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(organizationService.confirmBootstrap.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -126,8 +145,9 @@ describe("OrganizationCommands", () => {
         });
     });
 
-    describe("rejectBootstrap", () => {
-        it("consumes rejectBootstrap with the original process and transaction", async () => {
+    describe("[Method] - rejectBootstrap", () => {
+        it("[case] - consumes rejectBootstrap with the original process and transaction", async () => {
+            // Arrange
             const { commands, organizationService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -136,8 +156,10 @@ describe("OrganizationCommands", () => {
             };
             organizationService.rejectBootstrap.mockResolvedValue({ realms: [{ realm: REALM }] });
 
+            // Act
             await commands.rejectBootstrap({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(organizationService.rejectBootstrap.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -155,8 +177,9 @@ describe("OrganizationCommands", () => {
         });
     });
 
-    describe("confirmTransfer", () => {
-        it("consumes confirmTransfer with the original process and transaction", async () => {
+    describe("[Method] - confirmTransfer", () => {
+        it("[case] - consumes confirmTransfer with the original process and transaction", async () => {
+            // Arrange
             const { commands, organizationService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -171,8 +194,10 @@ describe("OrganizationCommands", () => {
             };
             organizationService.confirmTransfer.mockResolvedValue({ realms: [] });
 
+            // Act
             await commands.confirmTransfer({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(organizationService.confirmTransfer.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -180,8 +205,9 @@ describe("OrganizationCommands", () => {
         });
     });
 
-    describe("rejectTransfer", () => {
-        it("consumes rejectTransfer with the original process and transaction", async () => {
+    describe("[Method] - rejectTransfer", () => {
+        it("[case] - consumes rejectTransfer with the original process and transaction", async () => {
+            // Arrange
             const { commands, organizationService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -196,8 +222,10 @@ describe("OrganizationCommands", () => {
             };
             organizationService.rejectTransfer.mockResolvedValue(undefined);
 
+            // Act
             await commands.rejectTransfer({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(organizationService.rejectTransfer.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -205,12 +233,14 @@ describe("OrganizationCommands", () => {
         });
     });
 
-    describe("transferOwnership", () => {
-        it("binds an ownership transfer to the requested membership, realm and actor", async () => {
+    describe("[Method] - transferOwnership", () => {
+        it("[case] - binds an ownership transfer to the requested membership, realm and actor", async () => {
+            // Arrange
             const { commands, organizationService, transaction, run } = helpers.commands();
             const transfer = { organization: helpers.createOrganization(), previousOwner: ACTOR, owner: ACCOUNT };
             organizationService.transferOwnership.mockResolvedValue(transfer);
 
+            // Act
             await commands.transferOwnership({
                 input: { membership: ID, reason: "New owner" },
                 actor: ACTOR,
@@ -218,11 +248,14 @@ describe("OrganizationCommands", () => {
                 id: "organization-id",
                 context: CONTEXT,
             });
+            const result = organizationService.transferOwnership.mock.calls;
+            const result2 = await run.mock.results[0]?.value;
 
-            expect(organizationService.transferOwnership.mock.calls).toEqual([
+            // Assert
+            expect(result).toEqual([
                 [{ membership: ID, id: "organization-id", realm: REALM, transaction: transaction.entityManager }],
             ]);
-            await expect(run.mock.results[0]?.value).resolves.toEqual({ ...transfer, actor: ACTOR });
+            expect(result2).toEqual({ ...transfer, actor: ACTOR });
             expect(run.mock.calls).toEqual([
                 [
                     expect.objectContaining({

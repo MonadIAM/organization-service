@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { InviteStatus } from "~context/enums";
 import { Exception } from "~common/exceptions";
+import { InviteStatus } from "~context/enums";
 
 export class Invite implements Entities.Invite.Contract {
     private static readonly dictionaryPath = "entities.invite";

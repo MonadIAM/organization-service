@@ -7,14 +7,15 @@ import { ChangeLog } from "~common/transaction-manager/entities";
 
 const helpers = new ChangeLogIntegrationHelpers();
 
-describe("ChangeLogService integration", () => {
+describe("[DomainService] - ChangeLog", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("purgeExpired", () => {
-        it("purges only expired entries up to the batch size", async () => {
+    describe("[Method] - purgeExpired", () => {
+        it("[case] - purges only expired entries up to the batch size", async () => {
+            // Arrange
             const expired = await suite.fixtures().createChangeLog({
                 createdAt: new Date("2020-01-01T00:00:00.000Z"),
             });
@@ -22,6 +23,7 @@ describe("ChangeLogService integration", () => {
                 createdAt: new Date("2030-01-01T00:00:00.000Z"),
             });
 
+            // Act
             await suite.transaction((transaction) =>
                 suite.repository().changeLogService.purgeExpired({
                     expirationDate: new Date("2025-01-01T00:00:00.000Z"),
@@ -29,13 +31,12 @@ describe("ChangeLogService integration", () => {
                     transaction,
                 }),
             );
+            const result = await suite.transaction((transaction) => transaction.count(ChangeLog, { id: expired.id }));
+            const result1 = await suite.transaction((transaction) => transaction.count(ChangeLog, { id: active.id }));
 
-            await expect(
-                suite.transaction((transaction) => transaction.count(ChangeLog, { id: expired.id })),
-            ).resolves.toBe(0);
-            await expect(suite.transaction((transaction) => transaction.count(ChangeLog, { id: active.id }))).resolves.toBe(
-                1,
-            );
+            // Assert
+            expect(result).toBe(0);
+            expect(result1).toBe(1);
         });
     });
 });

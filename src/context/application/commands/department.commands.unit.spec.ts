@@ -12,14 +12,16 @@ const ID = "entity-a";
 const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const helpers = new DepartmentCommandsUnitHelpers();
 
-describe("DepartmentCommands", () => {
-    describe("create", () => {
-        it("creates in a transaction with the required ownership scope", async () => {
+describe("[Commands] - Department", () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates in a transaction with the required ownership scope", async () => {
+            // Arrange
             const { commands, departmentService, transaction, run } = helpers.commands();
             const input = { name: "New entity", description: "Description" };
             const created = helpers.createDepartment();
             departmentService.create.mockResolvedValue(created);
 
+            // Act
             await commands.create({
                 input,
                 actor: ACTOR,
@@ -28,6 +30,7 @@ describe("DepartmentCommands", () => {
                 organization: ORGANIZATION,
             });
 
+            // Assert
             expect(departmentService.create.mock.calls).toEqual([
                 [{ input, transaction: transaction.entityManager, realm: REALM, organization: ORGANIZATION }],
             ]);
@@ -37,19 +40,21 @@ describe("DepartmentCommands", () => {
         });
     });
 
-    describe("archive / restore", () => {
+    describe("[Behavior] - archive lifecycle", () => {
         it.each([
             { method: "archive", count: 1 },
             { method: "archive", count: 2 },
             { method: "restore", count: 2 },
         ] as const)(
-            "$method preserves organization scope and reports $count changed entities",
+            "[case] - $method preserves organization scope and reports $count changed entities",
             async ({ method, count }) => {
+                // Arrange
                 const { commands, departmentService, transaction, run } = helpers.commands();
                 const entities = Array.from({ length: count }, () => helpers.createDepartment());
                 const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
                 departmentService[method].mockResolvedValue(entities);
 
+                // Act
                 const result = await commands[method]({
                     input,
                     actor: ACTOR,
@@ -58,6 +63,7 @@ describe("DepartmentCommands", () => {
                     context: CONTEXT,
                 });
 
+                // Assert
                 expect(departmentService[method].mock.calls).toEqual([
                     [
                         {
@@ -74,11 +80,13 @@ describe("DepartmentCommands", () => {
         );
     });
 
-    describe("update", () => {
-        it("updates only the patch within the requested organization", async () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates only the patch within the requested organization", async () => {
+            // Arrange
             const { commands, departmentService, transaction } = helpers.commands();
             const input = { patch: { name: "Renamed" }, reason: "Correction" };
 
+            // Act
             await commands.update({
                 input,
                 id: ID,
@@ -88,6 +96,7 @@ describe("DepartmentCommands", () => {
                 context: CONTEXT,
             });
 
+            // Assert
             expect(departmentService.update.mock.calls).toEqual([
                 [
                     {
@@ -102,12 +111,14 @@ describe("DepartmentCommands", () => {
         });
     });
 
-    describe("changeManager", () => {
-        it.each([ID, null])("changes the responsible position to %s within the organization", async (position) => {
+    describe("[Method] - changeManager", () => {
+        it.each([ID, null])("[case] - changes the responsible position to %s within the organization", async (position) => {
+            // Arrange
             const { commands, departmentService, transaction, run } = helpers.commands();
             const department = helpers.createDepartment();
             departmentService.changeManager.mockResolvedValue(department);
 
+            // Act
             await commands.changeManager({
                 input: { position, reason: "Rotation" },
                 id: ID,
@@ -116,11 +127,15 @@ describe("DepartmentCommands", () => {
                 actor: ACTOR,
                 context: CONTEXT,
             });
+            const result = departmentService.changeManager.mock.calls;
+            const calls2 = run.mock.calls.slice();
+            const result3 = await run.mock.results[0].value;
 
-            expect(departmentService.changeManager.mock.calls).toEqual([
+            // Assert
+            expect(result).toEqual([
                 [{ position, id: ID, realm: REALM, organization: ORGANIZATION, transaction: transaction.entityManager }],
             ]);
-            expect(run).toHaveBeenCalledWith(
+            expect(calls2).toContainEqual([
                 expect.objectContaining({
                     outbox: {
                         payloadMapper: DepartmentMapper.prototype.referencePayload,
@@ -128,18 +143,20 @@ describe("DepartmentCommands", () => {
                         actionType: PositionTopicAction.REFERENCE_REQUESTED,
                     },
                 }),
-            );
-            await expect(run.mock.results[0].value).resolves.toEqual({ department, actor: ACTOR, realm: REALM });
+            ]);
+            expect(result3).toEqual({ department, actor: ACTOR, realm: REALM });
         });
     });
 
-    describe("purge", () => {
-        it("purges one department and schedules its HR cleanup in the deletion transaction", async () => {
+    describe("[Method] - purge", () => {
+        it("[case] - purges one department and schedules its HR cleanup in the deletion transaction", async () => {
+            // Arrange
             const { commands, departmentService, transaction, run } = helpers.commands();
             const department = helpers.createDepartment();
             const input = { reason: "Cleanup" };
             departmentService.purge.mockResolvedValue(department);
 
+            // Act
             const result = await commands.purge({
                 input,
                 id: department.id,
@@ -148,13 +165,18 @@ describe("DepartmentCommands", () => {
                 organization: ORGANIZATION,
                 context: CONTEXT,
             });
+            const result4 = departmentService.purge.mock.calls;
+            const calls5 = run.mock.calls.slice();
+            const calls6 = run.mock.calls.slice();
+            const result7 = await run.mock.results[0].value;
 
+            // Assert
             expect(result).toEqual({ message: "commands.department.PURGED" });
-            expect(departmentService.purge.mock.calls).toEqual([
+            expect(result4).toEqual([
                 [{ id: department.id, organization: ORGANIZATION, realm: REALM, transaction: transaction.entityManager }],
             ]);
-            expect(run).toHaveBeenCalledTimes(1);
-            expect(run).toHaveBeenCalledWith(
+            expect(calls5).toHaveLength(1);
+            expect(calls6).toContainEqual([
                 expect.objectContaining({
                     changeLog: true,
                     outbox: {
@@ -163,8 +185,8 @@ describe("DepartmentCommands", () => {
                         destinationTopic: KafkaTopic.POSITION,
                     },
                 }),
-            );
-            await expect(run.mock.results[0].value).resolves.toEqual({
+            ]);
+            expect(result7).toEqual({
                 departments: [department],
                 actor: ACTOR,
                 realm: REALM,
@@ -172,12 +194,14 @@ describe("DepartmentCommands", () => {
         });
     });
 
-    describe("archive", () => {
-        it("propagates a domain failure through the transaction", async () => {
+    describe("[Method] - archive", () => {
+        it("[case] - propagates a domain failure through the transaction", async () => {
+            // Arrange
             const { commands, departmentService } = helpers.commands();
             const failure = new Error("domain rejected mutation");
             departmentService.archive.mockRejectedValue(failure);
 
+            // Act
             const result = commands.archive({
                 input: { identifiers: [ID], reason: "Requested change" },
                 actor: ACTOR,
@@ -186,18 +210,21 @@ describe("DepartmentCommands", () => {
                 context: CONTEXT,
             });
 
+            // Assert
             await expect(result).rejects.toBe(failure);
         });
     });
 
-    describe("move", () => {
+    describe("[Method] - move", () => {
         it.each([MoveMode.SUBTREE, MoveMode.PARALLEL])(
-            "audits %s restructuring without changing HR placement",
+            "[case] - audits %s restructuring without changing HR placement",
             async (mode) => {
+                // Arrange
                 const { commands, departmentService, transaction, run } = helpers.commands();
                 const input = { target: ID, targetParent: null, mode, reason: "Reorganization" };
                 departmentService.move.mockResolvedValue(undefined);
 
+                // Act
                 await commands.move({
                     input,
                     actor: ACTOR,
@@ -206,6 +233,7 @@ describe("DepartmentCommands", () => {
                     context: CONTEXT,
                 });
 
+                // Assert
                 expect(departmentService.move).toHaveBeenCalledWith({
                     ...input,
                     realm: REALM,

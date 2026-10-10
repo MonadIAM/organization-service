@@ -9,54 +9,67 @@ import { KafkaTopic } from "~context/enums";
 
 const helpers = new ChangeLogSubscriberUnitHelpers();
 
-describe("ChangeLogSubscriber", () => {
+describe("[Subscriber] - ChangeLog", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("onFlush", () => {
-        it("archives external closure changes once, even without managed entity changes", async () => {
+    describe("[Method] - onFlush", () => {
+        it("[case] - archives external closure changes once, even without managed entity changes", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
             const uow = helpers.uow({ changeSets: [] });
             ExternalChanges.record({ entityManager: transaction.entityManager, changes: [helpers.changeSet()] });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
+            const calls = transaction.persist.mock.calls.slice();
+            const calls1 = transaction.persist.mock.calls.slice();
+            const result = ExternalChanges.drain({ entityManager: transaction.entityManager });
 
-            expect(transaction.persist).toHaveBeenCalledWith(expect.any(ChangeLog));
-            expect(transaction.persist).toHaveBeenCalledWith(expect.any(Outbox));
-            expect(ExternalChanges.drain({ entityManager: transaction.entityManager })).toEqual([]);
+            // Assert
+            expect(calls).toContainEqual([expect.any(ChangeLog)]);
+            expect(calls1).toContainEqual([expect.any(Outbox)]);
+            expect(result).toEqual([]);
         });
 
-        it("does nothing when operation context is absent", async () => {
+        it("[case] - does nothing when operation context is absent", async () => {
+            // Arrange
             const { subscriber } = helpers.subscriber();
             const transaction = helpers.transaction();
             const uow = helpers.uow({ changeSets: [helpers.changeSet()] });
 
+            // Act
             await subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager }));
 
+            // Assert
             expect(transaction.persist).not.toHaveBeenCalled();
             expect(uow.computeChangeSet).not.toHaveBeenCalled();
         });
 
-        it("does nothing when change log is disabled", async () => {
+        it("[case] - does nothing when change log is disabled", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
             const uow = helpers.uow({ changeSets: [helpers.changeSet()] });
 
+            // Act
             await operationContext.run({ changeLogEnabled: false, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist).not.toHaveBeenCalled();
             expect(uow.computeChangeSet).not.toHaveBeenCalled();
         });
 
-        it("does not log audit, change log and outbox changes", async () => {
+        it("[case] - does not log audit, change log and outbox changes", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
@@ -68,29 +81,35 @@ describe("ChangeLogSubscriber", () => {
                 ],
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist).not.toHaveBeenCalled();
             expect(uow.computeChangeSet).not.toHaveBeenCalled();
         });
 
-        it("does not persist empty deltas", async () => {
+        it("[case] - does not persist empty deltas", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
             const uow = helpers.uow({ changeSets: [helpers.changeSet({ payload: {} })] });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist).not.toHaveBeenCalled();
             expect(uow.computeChangeSet).not.toHaveBeenCalled();
         });
 
-        it("masks, signs, persists and computes the change log and archive outbox", async () => {
+        it("[case] - masks, signs, persists and computes the change log and archive outbox", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber, logMasking, outbox } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
@@ -101,13 +120,14 @@ describe("ChangeLogSubscriber", () => {
             });
             const uow = helpers.uow({ changeSets: [changeSet] });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
-
             const changeLog = transaction.persist.mock.calls[0][0] as SystemEntities.ChangeLog;
             const outboxEntry = transaction.persist.mock.calls[1][0];
 
+            // Assert
             expect(logMasking.maskChangeLog).toHaveBeenCalledWith({
                 delta: { name: { old: "Old Name", new: "New Name" } },
             });
@@ -128,7 +148,8 @@ describe("ChangeLogSubscriber", () => {
             expect(uow.computeChangeSet).toHaveBeenNthCalledWith(2, outboxEntry);
         });
 
-        it("uses masked delta in the persisted change log", async () => {
+        it("[case] - uses masked delta in the persisted change log", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const maskedDelta = new DeltaChanges({
                 token: {
@@ -150,14 +171,17 @@ describe("ChangeLogSubscriber", () => {
                 ],
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist.mock.calls[0][0]).toEqual(expect.objectContaining({ delta: maskedDelta }));
         });
 
-        it("persists and computes signed change log before building archive outbox", async () => {
+        it("[case] - persists and computes signed change log before building archive outbox", async () => {
+            // Arrange
             const callOrder = ["start"];
             callOrder.length = 0;
             const operationContext = helpers.operationContext();
@@ -208,10 +232,12 @@ describe("ChangeLogSubscriber", () => {
                 }
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(callOrder).toEqual([
                 "maskChangeLog",
                 "sign",
@@ -223,63 +249,76 @@ describe("ChangeLogSubscriber", () => {
             ]);
         });
 
-        it("builds create deltas from payload values", async () => {
+        it("[case] - builds create deltas from payload values", async () => {
+            // Arrange
             const changeSet = helpers.changeSet({
                 payload: { name: "Created Name", code: "example.created" },
                 type: ChangeSetType.CREATE,
             });
 
+            // Act
             const changeLog = await helpers.flushSingleChangeLog({ changeSet });
 
+            // Assert
             expect(changeLog.delta).toEqual({
                 name: { old: null, new: "Created Name" },
                 code: { old: null, new: "example.created" },
             });
         });
 
-        it("builds update deltas from original entity values", async () => {
+        it("[case] - builds update deltas from original entity values", async () => {
+            // Arrange
             const changeSet = helpers.changeSet({
                 originalEntity: { name: "Old Name" },
                 payload: { name: "Updated Name" },
                 type: ChangeSetType.UPDATE,
             });
 
+            // Act
             const changeLog = await helpers.flushSingleChangeLog({ changeSet });
 
+            // Assert
             expect(changeLog.delta).toEqual({
                 name: { old: "Old Name", new: "Updated Name" },
             });
         });
 
-        it("uses null as old value when update original entity is absent", async () => {
+        it("[case] - uses null as old value when update original entity is absent", async () => {
+            // Arrange
             const changeSet = helpers.changeSet({
                 payload: { name: "Updated Name" },
                 type: ChangeSetType.UPDATE,
             });
 
+            // Act
             const changeLog = await helpers.flushSingleChangeLog({ changeSet });
 
+            // Assert
             expect(changeLog.delta).toEqual({
                 name: { old: null, new: "Updated Name" },
             });
         });
 
-        it("builds delete deltas from original entity values", async () => {
+        it("[case] - builds delete deltas from original entity values", async () => {
+            // Arrange
             const changeSet = helpers.changeSet({
                 originalEntity: { name: "Deleted Name", code: "example.deleted" },
                 type: ChangeSetType.DELETE,
                 payload: {},
             });
 
+            // Act
             const changeLog = await helpers.flushSingleChangeLog({ changeSet });
 
+            // Assert
             expect(changeLog.delta).toEqual({
                 name: { old: "Deleted Name", new: null },
                 code: { old: "example.deleted", new: null },
             });
         });
 
-        it("builds delete deltas from entity values when original entity is absent", async () => {
+        it("[case] - builds delete deltas from entity values when original entity is absent", async () => {
+            // Arrange
             const entity = {
                 id: "00000000-0000-4000-8000-000000000002",
                 name: "Deleted Name",
@@ -290,15 +329,18 @@ describe("ChangeLogSubscriber", () => {
                 payload: {},
             });
 
+            // Act
             const changeLog = await helpers.flushSingleChangeLog({ changeSet });
 
+            // Assert
             expect(changeLog.delta).toEqual({
                 id: { old: entity.id, new: null },
                 name: { old: entity.name, new: null },
             });
         });
 
-        it("joins a composite primary key returned as an object into the entity field", async () => {
+        it("[case] - joins a composite primary key returned as an object into the entity field", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
@@ -317,10 +359,12 @@ describe("ChangeLogSubscriber", () => {
                 ],
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist.mock.calls[0][0]).toEqual(
                 expect.objectContaining({
                     entity: "00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000002:1",
@@ -329,7 +373,8 @@ describe("ChangeLogSubscriber", () => {
             );
         });
 
-        it("joins a composite primary key into the entity field", async () => {
+        it("[case] - joins a composite primary key into the entity field", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
@@ -344,10 +389,12 @@ describe("ChangeLogSubscriber", () => {
                 ],
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist.mock.calls[0][0]).toEqual(
                 expect.objectContaining({
                     entity: "00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000002:1",
@@ -356,7 +403,8 @@ describe("ChangeLogSubscriber", () => {
             );
         });
 
-        it("does not process change sets added while persisting archive entities", async () => {
+        it("[case] - does not process change sets added while persisting archive entities", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const { subscriber } = helpers.subscriber({ operationContext });
             const transaction = helpers.transaction();
@@ -378,10 +426,12 @@ describe("ChangeLogSubscriber", () => {
                 }
             });
 
+            // Act
             await operationContext.run({ changeLogEnabled: true, auditEntry: "audit-entry" }, () =>
                 subscriber.onFlush(helpers.flushEventArgs({ uow: uow.uow, em: transaction.entityManager })),
             );
 
+            // Assert
             expect(transaction.persist).toHaveBeenCalledTimes(2);
             expect(uow.computeChangeSet).toHaveBeenCalledTimes(2);
         });

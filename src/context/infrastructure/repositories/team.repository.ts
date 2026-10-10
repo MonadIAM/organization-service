@@ -1,6 +1,6 @@
-import { raw } from "@mikro-orm/postgresql";
 import { InjectEntityManager } from "@mikro-orm/nestjs";
 import { Injectable, Scope } from "@nestjs/common";
+import { raw } from "@mikro-orm/postgresql";
 
 import { ExceptionMapper } from "~common/exceptions";
 import { BaseRepository } from "~common/mixins";

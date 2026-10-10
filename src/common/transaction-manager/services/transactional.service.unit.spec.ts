@@ -16,23 +16,25 @@ const AUDIT_PROPS = {
     entityType: EntityType.ORGANIZATION,
 };
 
-describe("TransactionalService", () => {
+describe("[CommonService] - Transactional", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("run", () => {
-        it("executes without audit and flushes outbox in the same transaction", async () => {
+    describe("[Method] - run", () => {
+        it("[case] - executes without audit and flushes outbox in the same transaction", async () => {
+            // Arrange
             const { service, transactional, outbox } = helpers.service();
             const example = helpers.createExample();
 
-            await expect(
-                service.run({
-                    outbox: helpers.outboxConfig<ORM.AnyEntity>(),
-                    execute: () => example,
-                }),
-            ).resolves.toBe(example);
+            // Act
+            const result = await service.run({
+                outbox: helpers.outboxConfig<ORM.AnyEntity>(),
+                execute: () => example,
+            });
 
+            // Assert
+            expect(result).toBe(example);
             expect(transactional.fork).toHaveBeenCalledTimes(1);
             expect(outbox.build).toHaveBeenCalledWith({
                 payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
@@ -43,7 +45,8 @@ describe("TransactionalService", () => {
             expect(transactional.flush).toHaveBeenCalledTimes(1);
         });
 
-        it("masks, signs and persists audit before executing the domain operation", async () => {
+        it("[case] - masks, signs and persists audit before executing the domain operation", async () => {
+            // Arrange
             const callOrder: string[] = [];
             const logMasking = helpers.logMaskingContract({
                 maskAuditLog: ({ input }: TransactionManager.LogMasking.MaskAuditLog.Props) => {
@@ -73,6 +76,7 @@ describe("TransactionalService", () => {
                 return Promise.resolve();
             });
 
+            // Act
             await service.run({
                 audit: AUDIT_PROPS,
                 changeLog: true,
@@ -81,10 +85,10 @@ describe("TransactionalService", () => {
                     return example;
                 },
             });
-
             const audit = transactional.persist.mock.calls[0][0];
             const archive = transactional.persist.mock.calls[1][0];
 
+            // Assert
             expect(callOrder).toEqual(["maskAuditLog", "sign", "persistAudit", "persistArchive", "execute", "flush"]);
             expect(archive).toEqual(
                 expect.objectContaining({
@@ -95,19 +99,24 @@ describe("TransactionalService", () => {
             expect(audit).toBeInstanceOf(AuditLog);
         });
 
-        it("forks the write manager for each run", async () => {
+        it("[case] - forks the write manager for each run", async () => {
+            // Arrange
             const { service, transactional } = helpers.service();
 
+            // Act
             await service.run({ execute: () => helpers.createExample() });
             await service.run({ execute: () => helpers.createExample() });
 
+            // Assert
             expect(transactional.fork).toHaveBeenCalledTimes(2);
             expect(transactional.transactional).toHaveBeenCalledTimes(2);
         });
 
-        it("does not mask audit when input is omitted", async () => {
+        it("[case] - does not mask audit when input is omitted", async () => {
+            // Arrange
             const { service, logMasking } = helpers.service();
 
+            // Act
             await service.run({
                 audit: {
                     context: { ip: "127.0.0.1", userAgent: "unit-agent" },
@@ -117,119 +126,140 @@ describe("TransactionalService", () => {
                 execute: () => helpers.createExample(),
             });
 
+            // Assert
             expect(logMasking.maskAuditLog).not.toHaveBeenCalled();
             expect(logMasking.sign).toHaveBeenCalledTimes(1);
         });
 
-        it("maps thrown execution errors and skips flush", async () => {
+        it("[case] - maps thrown execution errors and skips flush", async () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const error = new DriverException(new Error("execute failed"));
 
-            await expect(
-                service.run({
-                    execute: () => {
-                        throw error;
-                    },
-                    resource: "Example",
-                }),
-            ).rejects.toThrow("db.INTERNAL_DRIVER_ERROR");
+            // Act
+            const result = service.run({
+                execute: () => {
+                    throw error;
+                },
+                resource: "Example",
+            });
 
+            // Assert
+            await expect(result).rejects.toThrow("db.INTERNAL_DRIVER_ERROR");
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("passes domain exceptions through unchanged", async () => {
+        it("[case] - passes domain exceptions through unchanged", async () => {
+            // Arrange
             const { service } = helpers.service();
             const error = Exception.badRequest({
                 code: ErrorCode.BAD_REQUEST,
                 messageKey: "services.jwt.INVALID_ACCESS_TOKEN",
             });
 
-            await expect(
-                service.run({
-                    execute: () => {
-                        throw error;
-                    },
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.run({
+                execute: () => {
+                    throw error;
+                },
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(error);
         });
 
-        it("opens change log context only when audit is present", async () => {
+        it("[case] - opens change log context only when audit is present", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const runSpy = jest.spyOn(operationContext, "run");
             const { service } = helpers.service({ operationContext });
 
+            // Act
             await service.run({
                 execute: () => Promise.resolve(),
                 changeLog: true,
             });
 
+            // Assert
             expect(runSpy).not.toHaveBeenCalled();
         });
 
-        it("sets changeLogEnabled to false by default when audit is present", async () => {
+        it("[case] - sets changeLogEnabled to false by default when audit is present", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const runSpy = jest.spyOn(operationContext, "run");
             const { service } = helpers.service({ operationContext });
 
+            // Act
             await service.run({
                 execute: () => helpers.createExample(),
                 audit: AUDIT_PROPS,
             });
 
+            // Assert
             expect(runSpy).toHaveBeenCalledWith(expect.objectContaining({ changeLogEnabled: false }), expect.any(Function));
         });
 
-        it("exposes the audit entry inside execute", async () => {
+        it("[case] - exposes the audit entry inside execute", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
+            const observed: ReturnType<typeof operationContext.get>[] = [];
             const { service } = helpers.service({ operationContext });
 
+            // Act
             await service.run({
                 audit: AUDIT_PROPS,
                 changeLog: true,
                 execute: () => {
-                    expect(operationContext.get()).toEqual({
-                        auditEntry: expect.any(String),
-                        changeLogEnabled: true,
-                    });
+                    observed.push(operationContext.get());
                     return helpers.createExample();
                 },
             });
+
+            // Assert
+            expect(observed).toEqual([{ auditEntry: expect.any(String), changeLogEnabled: true }]);
         });
 
-        it("does not map Vault failures as database errors", async () => {
+        it("[case] - does not map Vault failures as database errors", async () => {
+            // Arrange
             const error = new Error("vault unavailable");
             const logMasking = helpers.logMaskingContract({
                 maskAuditLog: () => Promise.reject(error),
             });
             const { service } = helpers.service({ logMasking });
 
-            await expect(
-                service.run({
-                    execute: () => helpers.createExample(),
-                    audit: AUDIT_PROPS,
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.run({
+                execute: () => helpers.createExample(),
+                audit: AUDIT_PROPS,
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(error);
         });
 
-        it("does not flush when audit signing fails", async () => {
+        it("[case] - does not flush when audit signing fails", async () => {
+            // Arrange
             const error = new Error("vault signing unavailable");
             const logMasking = helpers.logMaskingContract({
                 sign: () => Promise.reject(error),
             });
             const { service, transactional } = helpers.service({ logMasking });
 
-            await expect(
-                service.run({
-                    execute: () => helpers.createExample(),
-                    audit: AUDIT_PROPS,
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.run({
+                execute: () => helpers.createExample(),
+                audit: AUDIT_PROPS,
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(transactional.persist).not.toHaveBeenCalled();
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("does not execute or flush when audit archive build fails", async () => {
+        it("[case] - does not execute or flush when audit archive build fails", async () => {
+            // Arrange
             const error = new Error("audit archive unavailable");
             const execute = jest.fn(() => helpers.createExample());
             const outbox = helpers.outboxContract({
@@ -239,19 +269,21 @@ describe("TransactionalService", () => {
             });
             const { service, transactional } = helpers.service({ outbox });
 
-            await expect(
-                service.run({
-                    audit: AUDIT_PROPS,
-                    execute,
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.run({
+                audit: AUDIT_PROPS,
+                execute,
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(execute).not.toHaveBeenCalled();
             expect(transactional.persist).toHaveBeenCalledTimes(1);
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("does not map schema registry failures as database errors", async () => {
+        it("[case] - does not map schema registry failures as database errors", async () => {
+            // Arrange
             const error = new Error("schema registry unavailable");
             const outbox = helpers.outboxContract({
                 build: () => {
@@ -260,25 +292,27 @@ describe("TransactionalService", () => {
             });
             const { service, transactional } = helpers.service({ outbox });
 
-            await expect(
-                service.run({
-                    outbox: helpers.outboxConfig<ORM.AnyEntity>(),
-                    execute: () => helpers.createExample(),
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.run({
+                outbox: helpers.outboxConfig<ORM.AnyEntity>(),
+                execute: () => helpers.createExample(),
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(transactional.flush).not.toHaveBeenCalled();
         });
     });
 
-    describe("consume", () => {
+    describe("[Method] - consume", () => {
         const incoming: TransactionManager.Service.IncomingMessage = {
             consumerKey: "organization.placeholder.v1",
             event: "00000000-0000-4000-8000-000000000001",
             source: { topic: "source-topic", partition: 0, offset: "42" },
         };
 
-        it("claims the message before audit and domain effects", async () => {
+        it("[case] - claims the message before audit and domain effects", async () => {
+            // Arrange
             const callOrder: string[] = [];
             const claim = jest.fn<TransactionManager.Inbox.Claim.Signature>(() => {
                 callOrder.push("claim");
@@ -296,64 +330,77 @@ describe("TransactionalService", () => {
                 callOrder.push("execute");
             });
 
-            await expect(service.consume({ incoming, audit: AUDIT_PROPS, execute })).resolves.toEqual({
+            // Act
+            const result = await service.consume({ incoming, audit: AUDIT_PROPS, execute });
+
+            // Assert
+            expect(result).toEqual({
                 status: "processed",
                 value: undefined,
             });
-
             expect(callOrder).toEqual(["claim", "sign", "execute"]);
             expect(claim).toHaveBeenCalledWith({ transaction: transactional.transaction, incoming });
             expect(transactional.flush).toHaveBeenCalledTimes(1);
         });
 
-        it("returns duplicate without audit or domain effects", async () => {
+        it("[case] - returns duplicate without audit or domain effects", async () => {
+            // Arrange
             const execute = jest.fn<TransactionManager.Service.Run.Props<void>["execute"]>();
             const inbox = helpers.inboxContract({ claim: () => Promise.resolve(false) });
             const { service, transactional, logMasking } = helpers.service({ inbox });
 
-            await expect(service.consume({ incoming, audit: AUDIT_PROPS, execute })).resolves.toEqual({
+            // Act
+            const result = await service.consume({ incoming, audit: AUDIT_PROPS, execute });
+
+            // Assert
+            expect(result).toEqual({
                 status: "duplicate",
             });
-
             expect(execute).not.toHaveBeenCalled();
             expect(logMasking.sign).not.toHaveBeenCalled();
             expect(transactional.persist).not.toHaveBeenCalled();
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("maps inbox database errors using the operation resource", async () => {
+        it("[case] - maps inbox database errors using the operation resource", async () => {
+            // Arrange
             const error = new DriverException(new Error("claim failed"));
             const execute = jest.fn<TransactionManager.Service.Run.Props<void>["execute"]>();
             const inbox = helpers.inboxContract({ claim: () => Promise.reject(error) });
             const { service } = helpers.service({ inbox });
 
-            await expect(service.consume({ incoming, execute, resource: "Example" })).rejects.toThrow(
-                "db.INTERNAL_DRIVER_ERROR",
-            );
+            // Act
+            const result = service.consume({ incoming, execute, resource: "Example" });
+
+            // Assert
+            await expect(result).rejects.toThrow("db.INTERNAL_DRIVER_ERROR");
             expect(execute).not.toHaveBeenCalled();
         });
     });
 
-    describe("executeWithEffects", () => {
-        it("returns the execute result and flushes after persisting outbox", async () => {
+    describe("[Method] - executeWithEffects", () => {
+        it("[case] - returns the execute result and flushes after persisting outbox", async () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const example = helpers.createExample();
 
-            await expect(
-                service.executeWithEffects({
-                    transaction: transactional.transaction,
-                    params: {
-                        outbox: helpers.outboxConfig<ORM.AnyEntity>(),
-                        execute: () => example,
-                    },
-                }),
-            ).resolves.toBe(example);
+            // Act
+            const result = await service.executeWithEffects({
+                transaction: transactional.transaction,
+                params: {
+                    outbox: helpers.outboxConfig<ORM.AnyEntity>(),
+                    execute: () => example,
+                },
+            });
 
+            // Assert
+            expect(result).toBe(example);
             expect(transactional.persist).toHaveBeenCalledTimes(1);
             expect(transactional.flush).toHaveBeenCalledTimes(1);
         });
 
-        it("does not flush when outbox build fails after execute", async () => {
+        it("[case] - does not flush when outbox build fails after execute", async () => {
+            // Arrange
             const error = new Error("outbox unavailable");
             const outbox = helpers.outboxContract({
                 build: () => {
@@ -362,22 +409,25 @@ describe("TransactionalService", () => {
             });
             const { service, transactional } = helpers.service({ outbox });
 
-            await expect(
-                service.executeWithEffects({
-                    transaction: transactional.transaction,
-                    params: {
-                        outbox: helpers.outboxConfig<ORM.AnyEntity>(),
-                        execute: () => helpers.createExample(),
-                    },
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.executeWithEffects({
+                transaction: transactional.transaction,
+                params: {
+                    outbox: helpers.outboxConfig<ORM.AnyEntity>(),
+                    execute: () => helpers.createExample(),
+                },
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("flushes undefined command results without outbox", async () => {
+        it("[case] - flushes undefined command results without outbox", async () => {
+            // Arrange
             const { service, transactional } = helpers.service();
 
+            // Act
             await service.executeWithEffects({
                 transaction: transactional.transaction,
                 params: {
@@ -385,12 +435,14 @@ describe("TransactionalService", () => {
                 },
             });
 
+            // Assert
             expect(transactional.flush).toHaveBeenCalledTimes(1);
         });
     });
 
-    describe("persistOutboxEvents", () => {
-        it("persists one outbox entry per mapped payload", () => {
+    describe("[Method] - persistOutboxEvents", () => {
+        it("[case] - persists one outbox entry per mapped payload", () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const first = helpers.createExample({
                 id: "00000000-0000-4000-8000-000000000010",
@@ -399,6 +451,7 @@ describe("TransactionalService", () => {
                 id: "00000000-0000-4000-8000-000000000011",
             });
 
+            // Act
             service.persistOutboxEvents({
                 transaction: transactional.transaction,
                 result: [first, second],
@@ -415,13 +468,16 @@ describe("TransactionalService", () => {
                 },
             });
 
+            // Assert
             expect(transactional.persist).toHaveBeenCalledTimes(2);
         });
 
-        it("persists one outbox entry per outbox config", () => {
+        it("[case] - persists one outbox entry per outbox config", () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const example = helpers.createExample();
 
+            // Act
             service.persistOutboxEvents({
                 transaction: transactional.transaction,
                 result: example,
@@ -431,13 +487,16 @@ describe("TransactionalService", () => {
                 },
             });
 
+            // Assert
             expect(transactional.persist).toHaveBeenCalledTimes(2);
         });
 
-        it("uses the command result as payload when mapper is omitted", () => {
+        it("[case] - uses the command result as payload when mapper is omitted", () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const example = helpers.createExample();
 
+            // Act
             service.persistOutboxEvents({
                 transaction: transactional.transaction,
                 result: example,
@@ -450,13 +509,16 @@ describe("TransactionalService", () => {
                 },
             });
 
+            // Assert
             expect(transactional.persist).toHaveBeenCalledWith(expect.objectContaining({ payload: example }));
         });
 
-        it("does nothing when outbox is omitted", () => {
+        it("[case] - does nothing when outbox is omitted", () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const example = helpers.createExample();
 
+            // Act
             service.persistOutboxEvents({
                 transaction: transactional.transaction,
                 result: example,
@@ -465,18 +527,21 @@ describe("TransactionalService", () => {
                 },
             });
 
+            // Assert
             expect(transactional.persist).not.toHaveBeenCalled();
         });
     });
 
-    describe("emit", () => {
-        it("persists audit, archive and outbox with change log disabled", async () => {
+    describe("[Method] - emit", () => {
+        it("[case] - persists audit, archive and outbox with change log disabled", async () => {
+            // Arrange
             const operationContext = helpers.operationContext();
             const runSpy = jest.spyOn(operationContext, "run");
             const { service, transactional } = helpers.service({
                 operationContext,
             });
 
+            // Act
             await service.emit({
                 payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
                 actionType: AccessCacheTopicAction.INVALIDATE,
@@ -484,12 +549,14 @@ describe("TransactionalService", () => {
                 audit: AUDIT_PROPS,
             });
 
+            // Assert
             expect(runSpy).toHaveBeenCalledWith(expect.objectContaining({ changeLogEnabled: false }), expect.any(Function));
             expect(transactional.persist).toHaveBeenCalledTimes(3);
             expect(transactional.flush).toHaveBeenCalledTimes(1);
         });
 
-        it("does not map emit dependency failures as database errors", async () => {
+        it("[case] - does not map emit dependency failures as database errors", async () => {
+            // Arrange
             const error = new Error("schema registry unavailable");
             const outbox = helpers.outboxContract({
                 build: () => {
@@ -498,18 +565,20 @@ describe("TransactionalService", () => {
             });
             const { service } = helpers.service({ outbox });
 
-            await expect(
-                service.emit({
-                    payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
-                    actionType: AccessCacheTopicAction.INVALIDATE,
-                    destinationTopic: KafkaTopic.ACCESS_CACHE,
-                    audit: AUDIT_PROPS,
-                }),
-            ).rejects.toBe(error);
+            // Act
+            const result = service.emit({
+                payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
+                actionType: AccessCacheTopicAction.INVALIDATE,
+                destinationTopic: KafkaTopic.ACCESS_CACHE,
+                audit: AUDIT_PROPS,
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(error);
         });
     });
 
-    describe("consume with payload", () => {
+    describe("[Behavior] - payload consumption", () => {
         const props = {
             incoming: {
                 consumerKey: "payload.consumer.v1",
@@ -521,7 +590,8 @@ describe("TransactionalService", () => {
             destinationTopic: KafkaTopic.ACCESS_CACHE,
         } satisfies TransactionManager.Service.Consume.PayloadProps;
 
-        it("claims the message and emits its payload and audit in the same transaction", async () => {
+        it("[case] - claims the message and emits its payload and audit in the same transaction", async () => {
+            // Arrange
             const { service, transactional, inbox, outbox, operationContext } = helpers.service();
             const context = jest.spyOn(operationContext, "run");
             const claim = jest.spyOn(inbox, "claim");
@@ -529,8 +599,10 @@ describe("TransactionalService", () => {
             const emit = jest.spyOn(service, "emit");
             const execute = jest.spyOn(service, "executeTransaction");
 
+            // Act
             const result = await service.consume(props);
 
+            // Assert
             expect(result).toEqual({ status: "processed", value: undefined });
             expect(inbox.claim).toHaveBeenCalledWith({ incoming: props.incoming, transaction: transactional.transaction });
             expect(outbox.build).toHaveBeenCalledWith(
@@ -553,12 +625,15 @@ describe("TransactionalService", () => {
             expect(claim.mock.invocationCallOrder[0]).toBeLessThan(build.mock.invocationCallOrder[0]);
         });
 
-        it("does not build or persist payload and audit for a duplicate", async () => {
+        it("[case] - does not build or persist payload and audit for a duplicate", async () => {
+            // Arrange
             const inbox = helpers.inboxContract({ claim: () => Promise.resolve(false) });
             const { service, transactional, logMasking, outbox } = helpers.service({ inbox });
 
+            // Act
             const result = await service.consume(props);
 
+            // Assert
             expect(result).toEqual({ status: "duplicate" });
             expect(outbox.build).not.toHaveBeenCalled();
             expect(logMasking.sign).not.toHaveBeenCalled();
@@ -566,35 +641,45 @@ describe("TransactionalService", () => {
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("propagates outbox errors without flushing or opening a separate transaction", async () => {
+        it("[case] - propagates outbox errors without flushing or opening a separate transaction", async () => {
+            // Arrange
             const { service, transactional, outbox } = helpers.service();
             const error = new Error("payload build failed");
             jest.spyOn(outbox, "build").mockImplementation(() => {
                 throw error;
             });
 
-            await expect(service.consume(props)).rejects.toBe(error);
+            // Act
+            const result = service.consume(props);
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(transactional.transactional).toHaveBeenCalledTimes(1);
             expect(transactional.flush).not.toHaveBeenCalled();
         });
 
-        it("propagates flush errors from the payload transaction", async () => {
+        it("[case] - propagates flush errors from the payload transaction", async () => {
+            // Arrange
             const { service, transactional } = helpers.service();
             const error = new Error("flush failed");
             transactional.flush.mockRejectedValue(error);
 
-            await expect(service.consume(props)).rejects.toBe(error);
+            // Act
+            const result = service.consume(props);
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(transactional.transactional).toHaveBeenCalledTimes(1);
         });
 
-        it("requires exactly one of execute and payload in the input contract", () => {
+        it("[case] - requires exactly one of execute and payload in the input contract", () => {
+            // Arrange
             type Both = typeof props & { execute(): void };
             type Neither = Pick<typeof props, "incoming" | "audit">;
             type WithChangeLog = typeof props & { changeLog: true };
             type Accepts<T> = T extends TransactionManager.Service.Consume.Props<void> ? true : false;
 
+            // Act
             const accepted: [Accepts<typeof props>, Accepts<Both>, Accepts<Neither>, Accepts<WithChangeLog>] = [
                 true,
                 false,
@@ -602,6 +687,7 @@ describe("TransactionalService", () => {
                 false,
             ];
 
+            // Assert
             expect(accepted).toEqual([true, false, false, false]);
         });
     });

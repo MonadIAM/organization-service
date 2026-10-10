@@ -14,13 +14,14 @@ const ROLE_ID         = "00000000-0000-4000-8000-100000000006";
 
 const helpers = new InviteUnitHelpers();
 
-describe("InviteService", () => {
+describe("[DomainService] - Invite", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("create", () => {
-        it("creates an invite only when the invitee is not an active member", async () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates an invite only when the invitee is not an active member", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
                 realm: REALM_ID,
@@ -30,6 +31,7 @@ describe("InviteService", () => {
             });
             repositories.memberships.findUnique.mockImplementation(() => Promise.resolve(null));
 
+            // Act
             const result = await service.create({
                 input: {
                     organization: ORGANIZATION_ID,
@@ -40,29 +42,30 @@ describe("InviteService", () => {
                 transaction: transaction.entityManager,
                 realm: REALM_ID,
             });
-
-            expect(result.organization).toBe(organization);
-            expect(transaction.persist).toHaveBeenCalledWith(result);
-
+            const result1 = result.organization;
+            const calls = transaction.persist.mock.calls.slice();
             repositories.memberships.findUnique.mockImplementation(() => Promise.resolve(helpers.createMembership()));
+            const result2 = service.create({
+                input: {
+                    organization: ORGANIZATION_ID,
+                    invitee: INVITEE_ID,
+                    inviter: INVITER_ID,
+                    role: ROLE_ID,
+                },
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
 
-            await expect(
-                service.create({
-                    input: {
-                        organization: ORGANIZATION_ID,
-                        invitee: INVITEE_ID,
-                        inviter: INVITER_ID,
-                        role: ROLE_ID,
-                    },
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).rejects.toThrow("services.invite.INVITEE_ALREADY_MEMBER");
+            // Assert
+            expect(result1).toBe(organization);
+            expect(calls).toContainEqual([result]);
+            await expect(result2).rejects.toThrow("services.invite.INVITEE_ALREADY_MEMBER");
         });
     });
 
-    describe("accept", () => {
-        it("accepts an invite and delegates membership creation to the domain service", async () => {
+    describe("[Method] - accept", () => {
+        it("[case] - accepts an invite and delegates membership creation to the domain service", async () => {
+            // Arrange
             const invite = helpers.createInvite({
                 id: INVITE_ID,
                 invitee: INVITEE_ID,
@@ -76,14 +79,15 @@ describe("InviteService", () => {
             membership.beginJoin();
             services.memberships.join.mockImplementation(() => Promise.resolve(membership));
 
-            await expect(
-                service.accept({
-                    input: { invite: INVITE_ID, invitee: INVITEE_ID },
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).resolves.toEqual({ invite, membership });
+            // Act
+            const result = await service.accept({
+                input: { invite: INVITE_ID, invitee: INVITEE_ID },
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
 
+            // Assert
+            expect(result).toEqual({ invite, membership });
             expect(invite.status).toBe(InviteStatus.ACCEPTING);
             expect(services.memberships.join).toHaveBeenCalledWith({
                 input: {
@@ -96,8 +100,9 @@ describe("InviteService", () => {
         });
     });
 
-    describe("decline / cancel", () => {
-        it("declines and cancels invites with actor-specific repository scopes", async () => {
+    describe("[Behavior] - invite decisions", () => {
+        it("[case] - declines and cancels invites with actor-specific repository scopes", async () => {
+            // Arrange
             const invite = helpers.createInvite({
                 id: INVITE_ID,
                 invitee: INVITEE_ID,
@@ -108,54 +113,55 @@ describe("InviteService", () => {
             });
             repositories.invites.findUniqueOrThrow.mockImplementation(() => Promise.resolve(invite));
 
+            // Act
             await service.decline({
                 input: { invite: INVITE_ID, invitee: INVITEE_ID },
                 transaction: transaction.entityManager,
                 realm: REALM_ID,
             });
-
-            expect(invite.status).toBe(InviteStatus.DECLINED);
-
+            const result = invite.status;
             const pending = helpers.createInvite({
                 id: INVITE_ID,
                 inviter: INVITER_ID,
             });
             repositories.invites.findUniqueOrThrow.mockImplementation(() => Promise.resolve(pending));
-
             await service.cancel({
                 input: { invite: INVITE_ID, inviter: INVITER_ID },
                 transaction: transaction.entityManager,
                 realm: REALM_ID,
             });
 
+            // Assert
+            expect(result).toBe(InviteStatus.DECLINED);
             expect(pending.status).toBe(InviteStatus.CANCELLED);
         });
     });
 
-    describe("invalidate", () => {
-        it("requires invalidate scope and invalidates all selected pending invites", async () => {
+    describe("[Method] - invalidate", () => {
+        it("[case] - requires invalidate scope and invalidates all selected pending invites", async () => {
+            // Arrange
             const first = helpers.createInvite();
             const second = helpers.createInvite();
             const { service, repositories, transaction } = helpers.service({
                 invites: [first, second],
             });
 
-            await expect(
-                service.invalidate({
-                    input: {},
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).rejects.toThrow("services.invite.INVALIDATION_SCOPE_REQUIRED");
+            // Act
+            const result = service.invalidate({
+                input: {},
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
+            await Promise.allSettled([result]);
+            const result1 = await service.invalidate({
+                input: { account: INVITEE_ID },
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
 
-            await expect(
-                service.invalidate({
-                    input: { account: INVITEE_ID },
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).resolves.toEqual([first, second]);
-
+            // Assert
+            await expect(result).rejects.toThrow("services.invite.INVALIDATION_SCOPE_REQUIRED");
+            expect(result1).toEqual([first, second]);
             expect(first.status).toBe(InviteStatus.INVALIDATED);
             expect(second.status).toBe(InviteStatus.INVALIDATED);
             expect(repositories.invites.find).toHaveBeenCalledWith({
@@ -169,20 +175,23 @@ describe("InviteService", () => {
         });
     });
 
-    describe("expire", () => {
-        it("merges and expires provided invites at the supplied time", () => {
+    describe("[Method] - expire", () => {
+        it("[case] - merges and expires provided invites at the supplied time", () => {
+            // Arrange
             const at = new Date("2030-01-01T00:00:00.000Z");
             const invite = helpers.createInvite({
                 expiresAt: new Date("2029-01-01T00:00:00.000Z"),
             });
             const { service, transaction } = helpers.service();
 
+            // Act
             service.expire({
                 entities: [invite],
                 transaction: transaction.entityManager,
                 at,
             });
 
+            // Assert
             expect(transaction.merge).toHaveBeenCalledWith(invite);
             expect(invite.status).toBe(InviteStatus.EXPIRED);
         });

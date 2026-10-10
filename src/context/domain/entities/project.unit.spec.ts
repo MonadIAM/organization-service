@@ -39,99 +39,162 @@ function createAssignment(project: Project): ProjectAccountAssignment {
     });
 }
 
-describe("Project Entity", () => {
-    describe("constructor", () => {
-        it("should initialize an active project without a manager", () => {
+describe("[Entity] - Project", () => {
+    describe("[Method] - constructor", () => {
+        it("[case] - initializes an active project without a manager", () => {
+            // Arrange
+
+            // Act
             const project = createProject();
 
+            // Assert
             expect(project.status).toBe(ProjectStatus.ACTIVE);
             expect(project.manager).toBeUndefined();
         });
     });
 
-    describe("assignManager / unassignManager", () => {
-        it("should assign, replace and unassign a manager", () => {
+    describe("[Behavior] - manager assignment", () => {
+        it("[case] - assigns, replace and unassign a manager", () => {
+            // Arrange
             const project = createProject();
             const first = createAssignment(project);
             const second = createAssignment(project);
 
+            // Act
             project.assignManager({ assignment: first });
             project.assignManager({ assignment: second });
-            expect(project.manager).toBe(second);
-
+            const result = project.manager;
             project.unassignManager();
+
+            // Assert
+            expect(result).toBe(second);
             expect(project.manager).toBeUndefined();
         });
 
-        it("should reject manager operations without changes", () => {
+        it("[case] - rejects assigning the current manager", () => {
+            // Arrange
             const project = createProject();
             const assignment = createAssignment(project);
             project.assignManager({ assignment });
 
-            expect(() => project.assignManager({ assignment })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => project.assignManager({ assignment });
+
+            // Assert
+            expect(act).toThrow("NO_CHANGES_DETECTED");
+        });
+        it("[case] - rejects removing an absent manager", () => {
+            // Arrange
+            const project = createProject();
+            const assignment = createAssignment(project);
+            project.assignManager({ assignment });
             project.unassignManager();
-            expect(() => project.unassignManager()).toThrow("NO_CHANGES_DETECTED");
+
+            // Act
+            const act = (): unknown => project.unassignManager();
+
+            // Assert
+            expect(act).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("update", () => {
-        it("should update mutable metadata", () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates mutable metadata", () => {
+            // Arrange
             const project = createProject();
 
+            // Act
             project.update({
                 patch: { description: "Updated", name: "Updated project" },
             });
 
+            // Assert
             expect(project.description).toBe("Updated");
             expect(project.name).toBe("Updated project");
             expect(project.updatedAt).toBeInstanceOf(Date);
         });
 
-        it("should reject empty and unchanged metadata updates", () => {
+        it("[case] - rejects empty and unchanged metadata updates", () => {
+            // Arrange
             const project = createProject();
 
-            expect(() => project.update({ patch: {} })).toThrow("EMPTY_UPDATE_PATCH");
-            expect(() => project.update({ patch: { name: project.name } })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => project.update({ patch: {} });
+            const act1 = (): unknown => project.update({ patch: { name: project.name } });
+
+            // Assert
+            expect(act).toThrow("EMPTY_UPDATE_PATCH");
+            expect(act1).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("archive / restore / canPurge", () => {
-        it("should archive, restore and guard purging", () => {
+    describe("[Behavior] - archive lifecycle", () => {
+        it("[case] - rejects purging an active project", () => {
+            // Arrange
             const project = createProject();
-            expect(() => project.canPurge()).toThrow("CANNOT_PURGE_ACTIVE");
 
+            // Act
+            const act = (): unknown => project.canPurge();
+
+            // Assert
+            expect(act).toThrow("CANNOT_PURGE_ACTIVE");
+        });
+        it("[case] - allows purging an archived project", () => {
+            // Arrange
+            const project = createProject();
             project.archive();
+
+            // Act
+            const act = (): unknown => project.canPurge();
+
+            // Assert
             expect(project.status).toBe(ProjectStatus.ARCHIVED);
             expect(project.archivedAt).toBeInstanceOf(Date);
-            expect(() => project.canPurge()).not.toThrow();
+            expect(act).not.toThrow();
+        });
+        it("[case] - restores an archived project", () => {
+            // Arrange
+            const project = createProject();
 
+            // Act
+            project.archive();
             project.restore();
+
+            // Assert
             expect(project.status).toBe(ProjectStatus.ACTIVE);
             expect(project.archivedAt).toBeUndefined();
         });
     });
 
-    describe("beginBootstrap", () => {
-        it("rejects a competing bootstrap without replacing the current process", () => {
+    describe("[Method] - beginBootstrap", () => {
+        it("[case] - rejects a competing bootstrap without replacing the current process", () => {
+            // Arrange
             const project = createProject();
             project.beginBootstrap();
             const process = project.process;
 
-            expect(() => project.beginBootstrap()).toThrow("entities.project.OPERATION_CONFLICT");
+            // Act
+            const act = (): unknown => project.beginBootstrap();
 
+            // Assert
+            expect(act).toThrow("entities.project.OPERATION_CONFLICT");
             expect(project.process).toBe(process);
             expect(project.status).toBe(ProjectStatus.PROVISIONING);
         });
     });
 
-    describe("rejectBootstrap", () => {
-        it("rejects a late bootstrap refusal after activation", () => {
+    describe("[Method] - rejectBootstrap", () => {
+        it("[case] - rejects a late bootstrap refusal after activation", () => {
+            // Arrange
             const project = createProject();
             project.beginBootstrap();
             project.confirmBootstrap();
 
-            expect(() => project.rejectBootstrap("late rejection")).toThrow("entities.project.OPERATION_CONFLICT");
+            // Act
+            const act = (): unknown => project.rejectBootstrap("late rejection");
 
+            // Assert
+            expect(act).toThrow("entities.project.OPERATION_CONFLICT");
             expect(project.status).toBe(ProjectStatus.ACTIVE);
         });
     });

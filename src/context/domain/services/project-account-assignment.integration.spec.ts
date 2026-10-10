@@ -8,18 +8,20 @@ import { ProjectAccountAssignment } from "~context/domain/entities";
 
 const helpers = new ProjectAccountAssignmentIntegrationHelpers();
 
-describe("ProjectAccountAssignmentService integration", () => {
+describe("[DomainService] - ProjectAccountAssignment", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("create / clean", () => {
-        it("creates and then cleans an assignment by membership", async () => {
+    describe("[Behavior] - assignment lifecycle", () => {
+        it("[case] - creates and then cleans an assignment by membership", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const membership = await suite.fixtures().createMembership({ organization });
             const project = await suite.fixtures().createProject({ organization, realm: organization.realm });
 
+            // Act
             const assignment = await suite.transaction((transaction) =>
                 suite.repository().assignmentService.create({
                     input: { membership: membership.id, project: project.id },
@@ -31,10 +33,12 @@ describe("ProjectAccountAssignmentService integration", () => {
             await suite.transaction((transaction) =>
                 suite.repository().assignmentService.clean({ memberships: [membership.id], transaction }),
             );
+            const result = await suite.transaction((transaction) =>
+                transaction.count(ProjectAccountAssignment, { id: assignment.id }),
+            );
 
-            await expect(
-                suite.transaction((transaction) => transaction.count(ProjectAccountAssignment, { id: assignment.id })),
-            ).resolves.toBe(0);
+            // Assert
+            expect(result).toBe(0);
         });
     });
 });

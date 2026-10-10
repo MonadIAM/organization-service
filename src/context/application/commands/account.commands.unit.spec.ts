@@ -7,13 +7,16 @@ const ACCOUNT = "target-account";
 const INCOMING: TransactionManager.Service.IncomingMessage = { consumerKey: "unit-consumer", event: "incoming-event" };
 const helpers = new AccountCommandsUnitHelpers();
 
-describe("AccountCommands", () => {
-    describe("purge", () => {
-        it("consumes account deletion and schedules realm and access cleanup together", async () => {
+describe("[Commands] - Account", () => {
+    describe("[Method] - purge", () => {
+        it("[case] - consumes account deletion and schedules realm and access cleanup together", async () => {
+            // Arrange
             const { commands, accountService, transaction, consume } = helpers.commands();
 
+            // Act
             await commands.purge({ incoming: INCOMING, account: ACCOUNT });
 
+            // Assert
             expect(accountService.purge.mock.calls).toEqual([
                 [{ account: ACCOUNT, transaction: transaction.entityManager }],
             ]);

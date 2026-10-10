@@ -10,16 +10,19 @@ const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const INCOMING: TransactionManager.Service.IncomingMessage = { consumerKey: "unit-consumer", event: "incoming-event" };
 const helpers = new ProjectCommandsUnitHelpers();
 
-describe("ProjectCommands", () => {
-    describe("create", () => {
-        it("creates in a transaction with the required ownership scope", async () => {
+describe("[Commands] - Project", () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates in a transaction with the required ownership scope", async () => {
+            // Arrange
             const { commands, projectService, transaction, run } = helpers.commands();
             const input = { organization: "parent-id", name: "New entity", description: "Description", realm: REALM };
             const created = helpers.createProject();
             projectService.create.mockResolvedValue(created);
 
+            // Act
             await commands.create({ input, actor: ACTOR, context: CONTEXT });
 
+            // Assert
             expect(projectService.create.mock.calls).toEqual([[{ input, transaction: transaction.entityManager }]]);
             expect(run.mock.calls).toEqual([
                 [expect.objectContaining({ changeLog: true, audit: expect.objectContaining({ actor: ACTOR, input }) })],
@@ -27,61 +30,76 @@ describe("ProjectCommands", () => {
         });
     });
 
-    describe("archive / restore / purge", () => {
+    describe("[Behavior] - archive lifecycle", () => {
         it.each([
             { method: "archive", count: 1 },
             { method: "archive", count: 2 },
             { method: "restore", count: 2 },
             { method: "purge", count: 2 },
-        ] as const)("$method preserves realm scope and reports $count changed entities", async ({ method, count }) => {
-            const { commands, projectService, transaction, run } = helpers.commands();
-            const entities = Array.from({ length: count }, () => helpers.createProject());
-            const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
-            projectService[method].mockResolvedValue(entities);
+        ] as const)(
+            "[case] - $method preserves realm scope and reports $count changed entities",
+            async ({ method, count }) => {
+                // Arrange
+                const { commands, projectService, transaction, run } = helpers.commands();
+                const entities = Array.from({ length: count }, () => helpers.createProject());
+                const input = { identifiers: [ID, "another-id", "unchanged-id"], reason: "Requested change" };
+                projectService[method].mockResolvedValue(entities);
 
-            const result = await commands[method]({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
+                // Act
+                const result = await commands[method]({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
+                const result2 = projectService[method].mock.calls;
+                const result4 = result.params;
+                const calls5 = run.mock.calls.slice();
+                const result6 = await run.mock.results[0]?.value;
 
-            expect(projectService[method].mock.calls).toEqual([
-                [{ identifiers: input.identifiers, realm: REALM, transaction: transaction.entityManager }],
-            ]);
-            expect(result.params).toEqual(count > 1 ? { count } : undefined);
-            expect(run).toHaveBeenCalledTimes(1);
-            await expect(run.mock.results[0]?.value).resolves.toEqual({ ...{ projects: entities }, actor: ACTOR });
-            expect(run.mock.calls).toEqual([
-                [
-                    expect.objectContaining({
-                        outbox: expect.objectContaining({
-                            destinationTopic: KafkaTopic.REALM,
-                            actionType:
-                                method === "restore"
-                                    ? RealmTopicAction.SYSTEM_RESTORE
-                                    : method === "purge"
-                                      ? RealmTopicAction.SYSTEM_PURGE
-                                      : RealmTopicAction.SYSTEM_REVOKE,
+                // Assert
+                expect(result2).toEqual([
+                    [{ identifiers: input.identifiers, realm: REALM, transaction: transaction.entityManager }],
+                ]);
+                expect(result4).toEqual(count > 1 ? { count } : undefined);
+                expect(calls5).toHaveLength(1);
+                expect(result6).toEqual({ ...{ projects: entities }, actor: ACTOR });
+                expect(run.mock.calls).toEqual([
+                    [
+                        expect.objectContaining({
+                            outbox: expect.objectContaining({
+                                destinationTopic: KafkaTopic.REALM,
+                                actionType:
+                                    method === "restore"
+                                        ? RealmTopicAction.SYSTEM_RESTORE
+                                        : method === "purge"
+                                          ? RealmTopicAction.SYSTEM_PURGE
+                                          : RealmTopicAction.SYSTEM_REVOKE,
+                            }),
                         }),
-                    }),
-                ],
-            ]);
-        });
+                    ],
+                ]);
+            },
+        );
     });
 
-    describe("update", () => {
-        it("updates only the patch within the requested realm", async () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates only the patch within the requested realm", async () => {
+            // Arrange
             const { commands, projectService, transaction } = helpers.commands();
             const input = { patch: { name: "Renamed" }, reason: "Correction" };
 
+            // Act
             await commands.update({ input, id: ID, realm: REALM, actor: ACTOR, context: CONTEXT });
 
+            // Assert
             expect(projectService.update.mock.calls).toEqual([
                 [{ patch: input.patch, id: ID, realm: REALM, transaction: transaction.entityManager }],
             ]);
         });
     });
 
-    describe("changeManager", () => {
-        it.each([ID, null])("changes the responsible assignment to %s within the realm", async (assignment) => {
+    describe("[Method] - changeManager", () => {
+        it.each([ID, null])("[case] - changes the responsible assignment to %s within the realm", async (assignment) => {
+            // Arrange
             const { commands, projectService, transaction } = helpers.commands();
 
+            // Act
             await commands.changeManager({
                 input: { assignment, reason: "Rotation" },
                 id: ID,
@@ -90,31 +108,36 @@ describe("ProjectCommands", () => {
                 context: CONTEXT,
             });
 
+            // Assert
             expect(projectService.changeManager.mock.calls).toEqual([
                 [{ assignment, id: ID, realm: REALM, transaction: transaction.entityManager }],
             ]);
         });
     });
 
-    describe("archive", () => {
-        it("propagates a domain failure through the transaction", async () => {
+    describe("[Method] - archive", () => {
+        it("[case] - propagates a domain failure through the transaction", async () => {
+            // Arrange
             const { commands, projectService } = helpers.commands();
             const failure = new Error("domain rejected mutation");
             projectService.archive.mockRejectedValue(failure);
 
-            await expect(
-                commands.archive({
-                    input: { identifiers: [ID], reason: "Requested change" },
-                    actor: ACTOR,
-                    realm: REALM,
-                    context: CONTEXT,
-                }),
-            ).rejects.toBe(failure);
+            // Act
+            const result = commands.archive({
+                input: { identifiers: [ID], reason: "Requested change" },
+                actor: ACTOR,
+                realm: REALM,
+                context: CONTEXT,
+            });
+
+            // Assert
+            await expect(result).rejects.toBe(failure);
         });
     });
 
-    describe("confirmBootstrap", () => {
-        it("consumes confirmBootstrap with the original process and transaction", async () => {
+    describe("[Method] - confirmBootstrap", () => {
+        it("[case] - consumes confirmBootstrap with the original process and transaction", async () => {
+            // Arrange
             const { commands, projectService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -123,8 +146,10 @@ describe("ProjectCommands", () => {
             };
             projectService.confirmBootstrap.mockResolvedValue({ realms: [] });
 
+            // Act
             await commands.confirmBootstrap({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(projectService.confirmBootstrap.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -132,8 +157,9 @@ describe("ProjectCommands", () => {
         });
     });
 
-    describe("rejectBootstrap", () => {
-        it("consumes rejectBootstrap with the original process and transaction", async () => {
+    describe("[Method] - rejectBootstrap", () => {
+        it("[case] - consumes rejectBootstrap with the original process and transaction", async () => {
+            // Arrange
             const { commands, projectService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -142,8 +168,10 @@ describe("ProjectCommands", () => {
             };
             projectService.rejectBootstrap.mockResolvedValue(undefined);
 
+            // Act
             await commands.rejectBootstrap({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(projectService.rejectBootstrap.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);

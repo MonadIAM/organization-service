@@ -13,13 +13,14 @@ const POSITION_ID     = "00000000-0000-4000-8000-100000000004";
 
 const helpers = new DepartmentUnitHelpers();
 
-describe("DepartmentService", () => {
+describe("[DomainService] - Department", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("create", () => {
-        it("creates a department in the requested organization", async () => {
+    describe("[Method] - create", () => {
+        it("[case] - creates a department in the requested organization", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
             });
@@ -27,6 +28,7 @@ describe("DepartmentService", () => {
                 organizations: [organization],
             });
 
+            // Act
             const result = await service.create({
                 input: {
                     name: "Department",
@@ -37,6 +39,7 @@ describe("DepartmentService", () => {
                 realm: REALM_ID,
             });
 
+            // Assert
             expect(repositories.organizations.findUniqueOrThrow).toHaveBeenCalledWith({
                 where: { id: ORGANIZATION_ID, realm: REALM_ID },
                 options: { lockMode: LockMode.PESSIMISTIC_WRITE, refresh: true },
@@ -47,13 +50,15 @@ describe("DepartmentService", () => {
         });
     });
 
-    describe("changeManager", () => {
-        it("assigns an HR position as managerPosition", async () => {
+    describe("[Method] - changeManager", () => {
+        it("[case] - assigns an HR position as managerPosition", async () => {
+            // Arrange
             const department = helpers.createDepartment({ id: DEPARTMENT_ID });
             const { service, transaction } = helpers.service({
                 departments: [department],
             });
 
+            // Act
             await service.changeManager({
                 id: DEPARTMENT_ID,
                 position: POSITION_ID,
@@ -62,16 +67,19 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(department.managerPosition).toBe(POSITION_ID);
         });
     });
 
-    describe("update / changeManager", () => {
-        it("updates department metadata", async () => {
+    describe("[Behavior] - metadata and manager changes", () => {
+        it("[case] - updates department metadata", async () => {
+            // Arrange
             const department = helpers.createDepartment({ id: DEPARTMENT_ID });
             department.assignManager({ position: POSITION_ID });
             const { service, transaction } = helpers.service({ departments: [department] });
 
+            // Act
             await service.update({
                 id: DEPARTMENT_ID,
                 patch: { name: "Updated" },
@@ -80,14 +88,17 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(department.name).toBe("Updated");
         });
 
-        it("unassigns the department managerPosition", async () => {
+        it("[case] - unassigns the department managerPosition", async () => {
+            // Arrange
             const department = helpers.createDepartment({ id: DEPARTMENT_ID });
             department.assignManager({ position: POSITION_ID });
             const { service, transaction } = helpers.service({ departments: [department] });
 
+            // Act
             await service.changeManager({
                 position: null,
                 id: DEPARTMENT_ID,
@@ -96,17 +107,20 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(department.managerPosition).toBeUndefined();
         });
     });
 
-    describe("archive", () => {
-        it("deduplicates archive identifiers and scopes them by organization", async () => {
+    describe("[Method] - archive", () => {
+        it("[case] - deduplicates archive identifiers and scopes them by organization", async () => {
+            // Arrange
             const department = helpers.createDepartment({ id: DEPARTMENT_ID });
             const { service, repositories, transaction } = helpers.service({
                 departments: [department],
             });
 
+            // Act
             await service.archive({
                 identifiers: [DEPARTMENT_ID, DEPARTMENT_ID],
                 organization: ORGANIZATION_ID,
@@ -114,6 +128,7 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(repositories.departments.find).toHaveBeenCalledWith({
                 where: {
                     id: { $in: [DEPARTMENT_ID] },
@@ -124,8 +139,9 @@ describe("DepartmentService", () => {
         });
     });
 
-    describe("purge", () => {
-        it.each(["active", "pending"] as const)("does not delete a department that is %s", async (state) => {
+    describe("[Method] - purge", () => {
+        it.each(["active", "pending"] as const)("[case] - does not delete a department that is %s", async (state) => {
+            // Arrange
             const department = helpers.createDepartment({
                 id: DEPARTMENT_ID,
                 status: state === "active" ? DepartmentStatus.ACTIVE : DepartmentStatus.ARCHIVED,
@@ -135,6 +151,7 @@ describe("DepartmentService", () => {
             }
             const { service, transaction } = helpers.service({ departments: [department] });
 
+            // Act
             const result = service.purge({
                 id: DEPARTMENT_ID,
                 organization: ORGANIZATION_ID,
@@ -142,15 +159,16 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             await expect(result).rejects.toThrow(state === "active" ? "CANNOT_PURGE_ACTIVE" : "OPERATION_CONFLICT");
-
             expect(transaction.remove).not.toHaveBeenCalled();
             expect(transaction.flush).not.toHaveBeenCalled();
         });
     });
 
-    describe("purge / restore", () => {
-        it("purges one archived department without repeated reads or flush", async () => {
+    describe("[Behavior] - archived departments", () => {
+        it("[case] - purges one archived department without repeated reads or flush", async () => {
+            // Arrange
             const department = helpers.createDepartment({
                 id: DEPARTMENT_ID,
                 status: DepartmentStatus.ARCHIVED,
@@ -159,6 +177,7 @@ describe("DepartmentService", () => {
                 departments: [department],
             });
 
+            // Act
             const result = await service.purge({
                 id: DEPARTMENT_ID,
                 organization: ORGANIZATION_ID,
@@ -166,6 +185,7 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             expect(result).toBe(department);
             expect(repositories.departments.findUniqueOrThrow).toHaveBeenCalledTimes(1);
             expect(repositories.departments.findUniqueOrThrow).toHaveBeenCalledWith({
@@ -177,10 +197,12 @@ describe("DepartmentService", () => {
             expect(transaction.flush).not.toHaveBeenCalled();
         });
 
-        it("rejects incomplete restore results", async () => {
+        it("[case] - rejects incomplete restore results", async () => {
+            // Arrange
             const { service, repositories, transaction } = helpers.service();
             repositories.departments.find.mockImplementation(() => Promise.resolve([]));
 
+            // Act
             const result = service.restore({
                 identifiers: [DEPARTMENT_ID],
                 organization: ORGANIZATION_ID,
@@ -188,6 +210,7 @@ describe("DepartmentService", () => {
                 transaction: transaction.entityManager,
             });
 
+            // Assert
             await expect(result).rejects.toThrow("services.department.DEPARTMENTS_NOT_FOUND");
         });
     });

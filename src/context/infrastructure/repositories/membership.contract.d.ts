@@ -1,7 +1,5 @@
-declare namespace Repositories {
-    namespace Membership {
-        interface Contract extends Repositories.Base.Contract<Entities.Membership, Repositories.Mappers.Membership.Types> {}
+declare namespace Repositories.Membership {
+    interface Contract extends Repositories.Base.Contract<Entities.Membership, Repositories.Mappers.Membership.Types> {}
 
-        interface QueryContract extends Pick<Contract, "findUniqueOrThrow" | "findMany"> {}
-    }
+    interface QueryContract extends Pick<Contract, "findUniqueOrThrow" | "findMany"> {}
 }

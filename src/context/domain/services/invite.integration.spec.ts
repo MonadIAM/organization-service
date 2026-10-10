@@ -9,18 +9,20 @@ import { Invite, Membership } from "~context/domain/entities";
 
 const helpers = new InviteIntegrationHelpers();
 
-describe("InviteService integration", () => {
+describe("[DomainService] - Invite", () => {
     const suite = postgresSuite({
         repository: (context) => helpers.service(context),
         fixture: (manager) => new CoreFixture(manager),
     });
 
-    describe("accept / confirmJoin", () => {
-        it("accepts an invite and creates its membership atomically", async () => {
+    describe("[Behavior] - join workflow", () => {
+        it("[case] - accepts an invite and creates its membership atomically", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const invitee = randomUUID();
             const invite = await suite.fixtures().createInvite({ organization, invitee, role: randomUUID() });
 
+            // Act
             const result = await suite.transaction((transaction) =>
                 suite.repository().inviteService.accept({
                     input: { invite: invite.id, invitee },
@@ -28,7 +30,6 @@ describe("InviteService integration", () => {
                     transaction,
                 }),
             );
-
             const [loadedInvite, membershipCount] = await suite.transaction(
                 async (transaction) =>
                     await Promise.all([
@@ -36,10 +37,7 @@ describe("InviteService integration", () => {
                         transaction.count(Membership, { id: result.membership.id, account: invitee }),
                     ]),
             );
-
-            expect(loadedInvite.status).toBe("ACCEPTING");
-            expect(membershipCount).toBe(1);
-
+            const result1 = loadedInvite.status;
             await suite.transaction((transaction) =>
                 suite.repository().inviteService.confirmJoin({
                     actor: invite.inviter,
@@ -57,17 +55,18 @@ describe("InviteService integration", () => {
                     transaction,
                 }),
             );
+            const result3 = await suite.transaction((transaction) =>
+                transaction.count(Invite, { id: invite.id, status: InviteStatus.ACCEPTED }),
+            );
+            const result4 = await suite.transaction((transaction) =>
+                transaction.count(Membership, { id: result.membership.id, status: MembershipStatus.ACTIVE }),
+            );
 
-            await expect(
-                suite.transaction((transaction) =>
-                    transaction.count(Invite, { id: invite.id, status: InviteStatus.ACCEPTED }),
-                ),
-            ).resolves.toBe(1);
-            await expect(
-                suite.transaction((transaction) =>
-                    transaction.count(Membership, { id: result.membership.id, status: MembershipStatus.ACTIVE }),
-                ),
-            ).resolves.toBe(1);
+            // Assert
+            expect(result1).toBe("ACCEPTING");
+            expect(membershipCount).toBe(1);
+            expect(result3).toBe(1);
+            expect(result4).toBe(1);
         });
     });
 });

@@ -21,72 +21,128 @@ function createDepartment(): Department {
     });
 }
 
-describe("Department Entity", () => {
-    describe("constructor", () => {
-        it("should initialize an active department without a managerPosition", () => {
+describe("[Entity] - Department", () => {
+    describe("[Method] - constructor", () => {
+        it("[case] - initializes an active department without a managerPosition", () => {
+            // Arrange
+
+            // Act
             const department = createDepartment();
 
+            // Assert
             expect(department.status).toBe(DepartmentStatus.ACTIVE);
             expect(department.managerPosition).toBeUndefined();
         });
     });
 
-    describe("assignManager / unassignManager", () => {
-        it("should assign, replace and unassign a managerPosition", () => {
+    describe("[Behavior] - manager assignment", () => {
+        it("[case] - assigns, replace and unassign a managerPosition", () => {
+            // Arrange
             const department = createDepartment();
             const first = randomUUID();
             const second = randomUUID();
 
+            // Act
             department.assignManager({ position: first });
             department.completePosition(false);
             department.assignManager({ position: second });
-            expect(department.managerPosition).toBe(second);
-
+            const result = department.managerPosition;
             department.unassignManager();
+
+            // Assert
+            expect(result).toBe(second);
             expect(department.managerPosition).toBeUndefined();
         });
 
-        it("should reject managerPosition operations without changes", () => {
+        it("[case] - rejects assigning the current managerPosition", () => {
+            // Arrange
             const department = createDepartment();
             const position = randomUUID();
             department.assignManager({ position });
             department.completePosition(false);
 
-            expect(() => department.assignManager({ position })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => department.assignManager({ position });
+
+            // Assert
+            expect(act).toThrow("NO_CHANGES_DETECTED");
+        });
+        it("[case] - rejects removing an absent managerPosition", () => {
+            // Arrange
+            const department = createDepartment();
+            const position = randomUUID();
+            department.assignManager({ position });
+            department.completePosition(false);
             department.unassignManager();
-            expect(() => department.unassignManager()).toThrow("NO_CHANGES_DETECTED");
+
+            // Act
+            const act = (): unknown => department.unassignManager();
+
+            // Assert
+            expect(act).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("update", () => {
-        it("should update mutable metadata", () => {
+    describe("[Method] - update", () => {
+        it("[case] - updates mutable metadata", () => {
+            // Arrange
             const department = createDepartment();
 
+            // Act
             department.update({
                 patch: { description: "Updated", name: "Updated department" },
             });
 
+            // Assert
             expect(department.description).toBe("Updated");
             expect(department.name).toBe("Updated department");
         });
 
-        it("should reject empty and unchanged metadata updates", () => {
+        it("[case] - rejects empty and unchanged metadata updates", () => {
+            // Arrange
             const department = createDepartment();
 
-            expect(() => department.update({ patch: {} })).toThrow("EMPTY_UPDATE_PATCH");
-            expect(() => department.update({ patch: { name: department.name } })).toThrow("NO_CHANGES_DETECTED");
+            // Act
+            const act = (): unknown => department.update({ patch: {} });
+            const act1 = (): unknown => department.update({ patch: { name: department.name } });
+
+            // Assert
+            expect(act).toThrow("EMPTY_UPDATE_PATCH");
+            expect(act1).toThrow("NO_CHANGES_DETECTED");
         });
     });
 
-    describe("archive / restore / canPurge", () => {
-        it("should archive, restore and guard purging", () => {
+    describe("[Behavior] - archive lifecycle", () => {
+        it("[case] - rejects purging an active department", () => {
+            // Arrange
             const department = createDepartment();
-            expect(() => department.canPurge()).toThrow("CANNOT_PURGE_ACTIVE");
 
+            // Act
+            const act = (): unknown => department.canPurge();
+
+            // Assert
+            expect(act).toThrow("CANNOT_PURGE_ACTIVE");
+        });
+        it("[case] - allows purging an archived department", () => {
+            // Arrange
+            const department = createDepartment();
             department.archive();
-            expect(() => department.canPurge()).not.toThrow();
+
+            // Act
+            const act = (): unknown => department.canPurge();
+
+            // Assert
+            expect(act).not.toThrow();
+        });
+        it("[case] - restores an archived department", () => {
+            // Arrange
+            const department = createDepartment();
+
+            // Act
+            department.archive();
             department.restore();
 
+            // Assert
             expect(department.status).toBe(DepartmentStatus.ACTIVE);
             expect(department.archivedAt).toBeUndefined();
         });

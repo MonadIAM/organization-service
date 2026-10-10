@@ -4,8 +4,8 @@ import { AccountTopicAction } from "@monadiam/shared";
 import { lastValueFrom } from "rxjs";
 
 import { KAFKA_RETRY_SERVICE, KAFKA_SCHEMA_REGISTRY, KAFKA_SERVICE, KafkaIncomingMapper } from "~infrastructure/kafka";
-import { KAFKA_METRICS_RECORDER } from "~observability/metrics/tokens";
 import { ACCOUNT_COMMANDS } from "~context/application/commands";
+import { KAFKA_METRICS_RECORDER } from "~observability/metrics/tokens";
 import { KafkaTopic } from "~context/enums";
 
 @Controller()

@@ -8,21 +8,24 @@ import { AssignmentStatus } from "~context/enums";
 
 import { ProjectAccountAssignmentRepository } from "./project-account-assignment.repository";
 
-describe("ProjectAccountAssignmentRepository", () => {
+describe("[Repository] - ProjectAccountAssignment", () => {
     const suite = postgresSuite({
         repository: ({ readManager }) => new ProjectAccountAssignmentRepository(readManager),
         fixture: (entityManager) => new ProjectAccountAssignmentFixture(entityManager),
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("maps the persisted project assignment through the schema", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - maps the persisted project assignment through the schema", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization();
             const membership = await suite.fixtures().createMembership({ organization });
             const project = await suite.fixtures().createProject({ organization });
             const assignment = await suite.fixtures().createProjectAccountAssignment({ membership, project });
 
+            // Act
             const loaded = await suite.repository().findUniqueOrThrow({ where: { id: assignment.id } });
 
+            // Assert
             expect(loaded).toMatchObject({
                 status: AssignmentStatus.ACTIVE,
                 assignedAt: assignment.assignedAt,
@@ -36,10 +39,12 @@ describe("ProjectAccountAssignmentRepository", () => {
         });
     });
 
-    describe("findMany", () => {
-        it("finds project assignments by account, project and status mapper filters", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds project assignments by account, project and status mapper filters", async () => {
+            // Arrange
             const { membership, project, matched } = await suite.fixtures().filterScenario();
 
+            // Act
             const [assignments, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 sort: { assignedAt: QueryOrder.ASC },
@@ -49,9 +54,12 @@ describe("ProjectAccountAssignmentRepository", () => {
                     status: { operator: PublicStringOperator.EQUAL, value: AssignmentStatus.ACTIVE },
                 },
             });
+            const result = total;
+            const result1 = assignments.map(({ id }) => id);
 
-            expect(total).toBe(1);
-            expect(assignments.map(({ id }) => id)).toEqual([matched.id]);
+            // Assert
+            expect(result).toBe(1);
+            expect(result1).toEqual([matched.id]);
         });
     });
 });

@@ -12,13 +12,14 @@ const ACCOUNT_ID      = "00000000-0000-4000-8000-100000000004";
 
 const helpers = new MembershipUnitHelpers();
 
-describe("MembershipService", () => {
+describe("[DomainService] - Membership", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("join", () => {
-        it("creates and persists a membership when none exists", async () => {
+    describe("[Method] - join", () => {
+        it("[case] - creates and persists a membership when none exists", async () => {
+            // Arrange
             const organization = helpers.createOrganization({
                 id: ORGANIZATION_ID,
                 realm: REALM_ID,
@@ -28,17 +29,20 @@ describe("MembershipService", () => {
             });
             repositories.memberships.findUnique.mockImplementation(() => Promise.resolve(null));
 
+            // Act
             const result = await service.join({
                 input: { organization: ORGANIZATION_ID, account: ACCOUNT_ID },
                 transaction: transaction.entityManager,
                 realm: REALM_ID,
             });
 
+            // Assert
             expect(result).toEqual(expect.objectContaining({ organization, account: ACCOUNT_ID }));
             expect(transaction.persist).toHaveBeenCalledWith(result);
         });
 
-        it("reactivates a left membership and rejects every other existing status", async () => {
+        it("[case] - reactivates a left membership and rejects every other existing status", async () => {
+            // Arrange
             const membership = helpers.createMembership({
                 id: MEMBERSHIP_ID,
                 status: MembershipStatus.LEFT,
@@ -48,67 +52,70 @@ describe("MembershipService", () => {
             });
             repositories.memberships.findUnique.mockImplementation(() => Promise.resolve(membership));
 
-            await expect(
-                service.join({
-                    input: {
-                        organization: membership.organization.id,
-                        account: ACCOUNT_ID,
-                    },
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).resolves.toBe(membership);
+            // Act
+            const result = await service.join({
+                input: {
+                    organization: membership.organization.id,
+                    account: ACCOUNT_ID,
+                },
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
+            const result1 = membership.status;
+            const result2 = service.join({
+                input: {
+                    organization: membership.organization.id,
+                    account: ACCOUNT_ID,
+                },
+                transaction: transaction.entityManager,
+                realm: REALM_ID,
+            });
 
-            expect(membership.status).toBe(MembershipStatus.JOINING);
-
-            await expect(
-                service.join({
-                    input: {
-                        organization: membership.organization.id,
-                        account: ACCOUNT_ID,
-                    },
-                    transaction: transaction.entityManager,
-                    realm: REALM_ID,
-                }),
-            ).rejects.toThrow("services.membership.MEMBERSHIP_ALREADY_EXISTS");
+            // Assert
+            expect(result).toBe(membership);
+            expect(result1).toBe(MembershipStatus.JOINING);
+            await expect(result2).rejects.toThrow("services.membership.MEMBERSHIP_ALREADY_EXISTS");
         });
     });
 
-    describe("suspend / resume", () => {
-        it("deduplicates identifiers and rejects incomplete bulk selections", async () => {
+    describe("[Behavior] - suspension lifecycle", () => {
+        it("[case] - deduplicates identifiers and rejects incomplete bulk selections", async () => {
+            // Arrange
             const membership = helpers.createMembership({ id: MEMBERSHIP_ID });
             const { service, repositories, transaction } = helpers.service({
                 memberships: [membership],
             });
 
+            // Act
             await service.suspend({
                 identifiers: [MEMBERSHIP_ID, MEMBERSHIP_ID],
                 realm: REALM_ID,
                 transaction: transaction.entityManager,
             });
-
-            expect(repositories.memberships.find).toHaveBeenCalledWith({
-                where: {
-                    id: { $in: [MEMBERSHIP_ID] },
-                    organization: { realm: REALM_ID },
-                },
-                options: { populate: ["organization"], refresh: true },
+            const calls = repositories.memberships.find.mock.calls.slice();
+            repositories.memberships.find.mockImplementation(() => Promise.resolve([]));
+            const result = service.resume({
+                identifiers: [MEMBERSHIP_ID],
+                realm: REALM_ID,
                 transaction: transaction.entityManager,
             });
 
-            repositories.memberships.find.mockImplementation(() => Promise.resolve([]));
-
-            await expect(
-                service.resume({
-                    identifiers: [MEMBERSHIP_ID],
-                    realm: REALM_ID,
+            // Assert
+            expect(calls).toContainEqual([
+                {
+                    where: {
+                        id: { $in: [MEMBERSHIP_ID] },
+                        organization: { realm: REALM_ID },
+                    },
+                    options: { populate: ["organization"], refresh: true },
                     transaction: transaction.entityManager,
-                }),
-            ).rejects.toThrow("services.membership.MEMBERSHIPS_NOT_FOUND");
+                },
+            ]);
+            await expect(result).rejects.toThrow("services.membership.MEMBERSHIPS_NOT_FOUND");
         });
     });
 
-    describe("leave / block", () => {
+    describe("[Behavior] - membership removal", () => {
         it.each([
             {
                 operation: "leave" as const,
@@ -119,8 +126,9 @@ describe("MembershipService", () => {
                 expectedStatus: MembershipStatus.BLOCKED,
             },
         ])(
-            "$operation performs the full business operation and returns its aggregate result",
+            "[case] - $operation performs the full business operation and returns its aggregate result",
             async ({ operation, expectedStatus }) => {
+                // Arrange
                 const membership = helpers.createMembership({
                     id: MEMBERSHIP_ID,
                 });
@@ -132,6 +140,7 @@ describe("MembershipService", () => {
                 });
                 services.projectAssignments.clean.mockImplementation(() => Promise.resolve([projectAssignment]));
 
+                // Act
                 const result = await service[operation]({
                     account: membership.account,
                     identifiers: [MEMBERSHIP_ID],
@@ -139,6 +148,7 @@ describe("MembershipService", () => {
                     transaction: transaction.entityManager,
                 });
 
+                // Assert
                 expect(membership.status).toBe(expectedStatus);
                 expect(repositories.memberships.find).toHaveBeenCalledWith({
                     where: {

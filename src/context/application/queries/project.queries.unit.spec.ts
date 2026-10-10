@@ -9,8 +9,8 @@ const ID = "entity-a";
 const PAGINATION: Pagination = { currentPage: 2, elementsPerPage: 10 };
 const helpers = new ProjectQueriesUnitHelpers();
 
-describe("ProjectQueries", () => {
-    describe("findUnique / findMany", () => {
+describe("[Queries] - Project", () => {
+    describe("[Behavior] - scoped reads", () => {
         it.each([
             { name: "no read permission", permissions: [], expected: { $or: [] } },
             {
@@ -58,12 +58,14 @@ describe("ProjectQueries", () => {
                 permissions: [PermissionCode.PROJECT_READ_ABSOLUTE, PermissionCode.PROJECT_READ_PERSONAL],
                 expected: {},
             },
-        ])("applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+        ])("[case] - applies $name visibility to single and paged reads", async ({ permissions, expected }) => {
+            // Arrange
             const { queries, projectRepository: repository } = helpers.queries();
             const entity = helpers.createProject();
             repository.findUniqueOrThrow.mockResolvedValue(entity);
             repository.findMany.mockResolvedValue([[entity], 1]);
 
+            // Act
             await queries.findUnique({
                 mode: QueryMode.DEFAULT,
                 view: ResponseViewType.COMPACT,
@@ -83,17 +85,20 @@ describe("ProjectQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([
                 [expect.objectContaining({ where: { id: ID, ...expected } })],
             ]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: expected })]]);
         });
 
-        it("uses management scope without imposing the caller's membership", async () => {
+        it("[case] - uses management scope without imposing the caller's membership", async () => {
+            // Arrange
             const { queries, projectRepository: repository } = helpers.queries();
             repository.findMany.mockResolvedValue([[], 0]);
             repository.findUniqueOrThrow.mockResolvedValue(helpers.createProject());
 
+            // Act
             await queries.findUnique({ mode: QueryMode.MANAGE, view: ResponseViewType.COMPACT, project: ID });
             await queries.findMany({
                 mode: QueryMode.MANAGE,
@@ -103,18 +108,21 @@ describe("ProjectQueries", () => {
                 sort: {},
             });
 
+            // Assert
             expect(repository.findUniqueOrThrow.mock.calls).toEqual([[expect.objectContaining({ where: { id: ID } })]]);
             expect(repository.findMany.mock.calls).toEqual([[expect.objectContaining({ prefilter: {} })]]);
         });
     });
 
-    describe("getLookupList", () => {
+    describe("[Method] - getLookupList", () => {
         it.each([QueryMode.DEFAULT, QueryMode.MANAGE])(
-            "%s scopes lookup results as well as ordinary lists",
+            "[case] - %s scopes lookup results as well as ordinary lists",
             async (mode) => {
+                // Arrange
                 const { queries, projectRepository: repository } = helpers.queries();
                 repository.getLookupList.mockResolvedValue([[], 0]);
 
+                // Act
                 await queries.getLookupList({
                     mode,
                     actor: ACTOR,
@@ -125,6 +133,7 @@ describe("ProjectQueries", () => {
                     term: "search",
                 });
 
+                // Assert
                 expect(repository.getLookupList.mock.calls).toEqual([
                     [
                         expect.objectContaining({

@@ -11,16 +11,19 @@ const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const INCOMING: TransactionManager.Service.IncomingMessage = { consumerKey: "unit-consumer", event: "incoming-event" };
 const helpers = new InviteCommandsUnitHelpers();
 
-describe("InviteCommands", () => {
-    describe("create", () => {
-        it("sets the authenticated account as inviter", async () => {
+describe("[Commands] - Invite", () => {
+    describe("[Method] - create", () => {
+        it("[case] - sets the authenticated account as inviter", async () => {
+            // Arrange
             const { commands, inviteService, transaction, run } = helpers.commands();
             const input = { organization: ID, invitee: ACCOUNT, role: "reader" };
             const invite = helpers.createInvite();
             inviteService.create.mockResolvedValue(invite);
 
+            // Act
             await commands.create({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
 
+            // Assert
             expect(inviteService.create.mock.calls).toEqual([
                 [{ input: { ...input, inviter: ACTOR }, realm: REALM, transaction: transaction.entityManager }],
             ]);
@@ -34,14 +37,17 @@ describe("InviteCommands", () => {
         });
     });
 
-    describe("accept / decline / cancel", () => {
+    describe("[Behavior] - invite decisions", () => {
         it.each(["accept", "decline", "cancel"] as const)(
-            "uses the actor as the correct party when processing %s",
+            "[case] - uses the actor as the correct party when processing %s",
             async (method) => {
+                // Arrange
                 const { commands, inviteService, transaction } = helpers.commands();
 
+                // Act
                 await commands[method]({ input: { invite: ID }, actor: ACTOR, realm: REALM, context: CONTEXT });
 
+                // Assert
                 expect(inviteService[method].mock.calls).toEqual([
                     [
                         {
@@ -55,28 +61,34 @@ describe("InviteCommands", () => {
         );
     });
 
-    describe("invalidate", () => {
-        it("passes invalidation scope into the transaction", async () => {
+    describe("[Method] - invalidate", () => {
+        it("[case] - passes invalidation scope into the transaction", async () => {
+            // Arrange
             const { commands, inviteService, transaction } = helpers.commands();
             const input = { organization: ID, account: ACCOUNT };
 
+            // Act
             await commands.invalidate({ input, actor: ACTOR, realm: REALM, context: CONTEXT });
 
+            // Assert
             expect(inviteService.invalidate.mock.calls).toEqual([
                 [{ input, realm: REALM, transaction: transaction.entityManager }],
             ]);
         });
     });
 
-    describe("expire", () => {
-        it.each([0, 2])("expires a batch of %i invitations and skips an empty transaction", async (count) => {
+    describe("[Method] - expire", () => {
+        it.each([0, 2])("[case] - expires a batch of %i invitations and skips an empty transaction", async (count) => {
+            // Arrange
             const { commands, inviteRepository, inviteService, transaction, run } = helpers.commands();
             const invites = Array.from({ length: count }, () => helpers.createInvite());
             const expirationDate = new Date("2026-01-01T00:00:00Z");
             inviteRepository.findExpiredPending.mockResolvedValue(invites);
 
+            // Act
             const result = await commands.expire({ expirationDate, batchSize: 50 });
 
+            // Assert
             expect(result).toBe(count);
             expect(inviteRepository.findExpiredPending.mock.calls).toEqual([[{ expirationDate, batchSize: 50 }]]);
             if (count) {
@@ -90,8 +102,9 @@ describe("InviteCommands", () => {
         });
     });
 
-    describe("confirmJoin", () => {
-        it("consumes confirmJoin with the original process and transaction", async () => {
+    describe("[Method] - confirmJoin", () => {
+        it("[case] - consumes confirmJoin with the original process and transaction", async () => {
+            // Arrange
             const { commands, inviteService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -110,8 +123,10 @@ describe("InviteCommands", () => {
             };
             inviteService.confirmJoin.mockResolvedValue({ access: [] });
 
+            // Act
             await commands.confirmJoin({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(inviteService.confirmJoin.mock.calls).toEqual([
                 [{ ...request, transaction: transaction.entityManager }],
             ]);
@@ -119,8 +134,9 @@ describe("InviteCommands", () => {
         });
     });
 
-    describe("rejectJoin", () => {
-        it("consumes rejectJoin with the original process and transaction", async () => {
+    describe("[Method] - rejectJoin", () => {
+        it("[case] - consumes rejectJoin with the original process and transaction", async () => {
+            // Arrange
             const { commands, inviteService, transaction, consume } = helpers.commands();
             const request = {
                 actor: ACTOR,
@@ -139,8 +155,10 @@ describe("InviteCommands", () => {
             };
             inviteService.rejectJoin.mockResolvedValue(undefined);
 
+            // Act
             await commands.rejectJoin({ ...request, incoming: INCOMING });
 
+            // Assert
             expect(inviteService.rejectJoin.mock.calls).toEqual([[{ ...request, transaction: transaction.entityManager }]]);
             expect(consume.mock.calls).toEqual([[expect.objectContaining({ incoming: INCOMING })]]);
         });

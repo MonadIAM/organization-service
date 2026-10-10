@@ -7,26 +7,28 @@ const BATCH_SIZE = 50;
 
 const helpers = new AuditLogUnitHelpers();
 
-describe("AuditLogService", () => {
+describe("[DomainService] - AuditLog", () => {
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
-    describe("purgeExpired", () => {
-        it("finds expired entries by batch size, removes them, and returns them", async () => {
+    describe("[Method] - purgeExpired", () => {
+        it("[case] - finds expired entries by batch size, removes them, and returns them", async () => {
+            // Arrange
             const first = helpers.createAuditLog();
             const second = helpers.createAuditLog();
             const { service, repositories, transaction } = helpers.service();
             repositories.auditLogs.find.mockImplementation(() => Promise.resolve([first, second]));
 
-            await expect(
-                service.purgeExpired({
-                    expirationDate: EXPIRATION_DATE,
-                    batchSize: BATCH_SIZE,
-                    transaction: transaction.entityManager,
-                }),
-            ).resolves.toEqual([first, second]);
+            // Act
+            const result = await service.purgeExpired({
+                expirationDate: EXPIRATION_DATE,
+                batchSize: BATCH_SIZE,
+                transaction: transaction.entityManager,
+            });
 
+            // Assert
+            expect(result).toEqual([first, second]);
             expect(repositories.auditLogs.find).toHaveBeenCalledWith({
                 where: { createdAt: { $lt: EXPIRATION_DATE } },
                 options: { limit: BATCH_SIZE },

@@ -10,21 +10,24 @@ import { OrganizationStatus } from "~context/enums";
 
 import { OrganizationRepository } from "./organization.repository";
 
-describe("OrganizationRepository", () => {
+describe("[Repository] - Organization", () => {
     const suite = postgresSuite({
         repository: ({ readManager }) => new OrganizationRepository(readManager),
         fixture: (entityManager) => new OrganizationFixture(entityManager),
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("maps the persisted organization through the schema", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - maps the persisted organization through the schema", async () => {
+            // Arrange
             const organization = await suite.fixtures().createOrganization({
                 description: "Mapping organization description",
                 title: "Mapping Organization",
             });
 
+            // Act
             const loaded = await suite.repository().findUniqueOrThrow({ where: { id: organization.id } });
 
+            // Assert
             expect(loaded).toMatchObject({
                 description: "Mapping organization description",
                 status: OrganizationStatus.ACTIVE,
@@ -38,10 +41,12 @@ describe("OrganizationRepository", () => {
         });
     });
 
-    describe("findMany", () => {
-        it("finds organizations by title and status mapper filters", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds organizations by title and status mapper filters", async () => {
+            // Arrange
             const { matched } = await suite.fixtures().filterScenario();
 
+            // Act
             const [organizations, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 sort: { createdAt: QueryOrder.ASC },
@@ -50,31 +55,41 @@ describe("OrganizationRepository", () => {
                     status: { operator: PublicStringOperator.EQUAL, value: OrganizationStatus.ACTIVE },
                 },
             });
+            const result = total;
+            const result1 = organizations.map(({ id }) => id);
 
-            expect(total).toBe(1);
-            expect(organizations.map(({ id }) => id)).toEqual([matched.id]);
+            // Assert
+            expect(result).toBe(1);
+            expect(result1).toEqual([matched.id]);
         });
     });
 
-    describe("getLookupList", () => {
-        it("uses trigram lookup with stable title tie-breakers", async () => {
+    describe("[Method] - getLookupList", () => {
+        it("[case] - uses trigram lookup with stable title tie-breakers", async () => {
+            // Arrange
             const scenario = await suite.fixtures().lookupSearchScenario();
 
+            // Act
             const [organizations, total] = await suite.repository().getLookupList({
                 pagination: { currentPage: 1, elementsPerPage: 10 },
                 term: scenario.term,
             });
+            const result = total;
+            const result1 = organizations[0]?.id;
+            const result2 = organizations.map(({ title }) => title);
 
-            expect(total).toBe(2);
-            expect(organizations[0]?.id).toBe(scenario.exact.id);
-            expect(organizations.map(({ title }) => title)).toEqual(scenario.expectedTitles);
+            // Assert
+            expect(result).toBe(2);
+            expect(result1).toBe(scenario.exact.id);
+            expect(result2).toEqual(scenario.expectedTitles);
         });
     });
 
-    describe("hasPendingProcesses", () => {
+    describe("[Method] - hasPendingProcesses", () => {
         it.each(["project", "membership", "invite", "department", "team"] as const)(
-            "detects a pending %s process only in the requested organizations",
+            "[case] - detects a pending %s process only in the requested organizations",
             async (target) => {
+                // Arrange
                 const organization = await suite.fixtures().createOrganization();
                 const foreign = await suite.fixtures().createOrganization();
                 const project = await suite.fixtures().createProject({ organization });
@@ -102,6 +117,7 @@ describe("OrganizationRepository", () => {
                     }
                 });
 
+                // Act
                 const results = await suite.transaction((transaction) => {
                     const repository = suite.repository();
                     return Promise.all([
@@ -112,6 +128,7 @@ describe("OrganizationRepository", () => {
                     ]);
                 });
 
+                // Assert
                 expect(results).toEqual([true, false, true, false]);
             },
         );

@@ -21,17 +21,21 @@ const REQUEST: Topics.Position.PlacementRequestedMessage["payload"] = {
 };
 const helpers = new PositionCommandsUnitHelpers();
 
-describe("PositionCommands", () => {
-    describe("validatePlacement", () => {
-        it("validates the placement and schedules a correlated confirmation in the incoming transaction", async () => {
+describe("[Commands] - Position", () => {
+    describe("[Method] - validatePlacement", () => {
+        it("[case] - validates the placement and schedules a correlated confirmation in the incoming transaction", async () => {
+            // Arrange
             const { commands, positionService, consume, transaction } = helpers.commands();
 
+            // Act
             await commands.validatePlacement({ incoming: INCOMING, ...REQUEST });
+            const result = positionService.validatePlacement.mock.calls;
+            const result3 = consume.mock.calls;
+            const result4 = await consume.mock.results[0].value;
 
-            expect(positionService.validatePlacement.mock.calls).toEqual([
-                [{ ...REQUEST, transaction: transaction.entityManager }],
-            ]);
-            expect(consume.mock.calls).toEqual([
+            // Assert
+            expect(result).toEqual([[{ ...REQUEST, transaction: transaction.entityManager }]]);
+            expect(result3).toEqual([
                 [
                     expect.objectContaining({
                         incoming: INCOMING,
@@ -51,19 +55,22 @@ describe("PositionCommands", () => {
                     }),
                 ],
             ]);
-            await expect(consume.mock.results[0].value).resolves.toEqual({
+            expect(result4).toEqual({
                 status: "processed",
                 value: { request: REQUEST },
             });
         });
 
-        it("turns a business refusal into a rejection with the original process and reason", async () => {
+        it("[case] - turns a business refusal into a rejection with the original process and reason", async () => {
+            // Arrange
             const { commands, positionService, consume } = helpers.commands();
             const error = Exception.notFound({ messageKey: "placement not found" });
             positionService.validatePlacement.mockRejectedValue(error);
 
+            // Act
             await commands.validatePlacement({ incoming: INCOMING, ...REQUEST });
 
+            // Assert
             expect(consume).toHaveBeenCalledTimes(2);
             expect(consume).toHaveBeenLastCalledWith(
                 expect.objectContaining({
@@ -78,33 +85,43 @@ describe("PositionCommands", () => {
         it.each([
             { name: "retryable dependency failure", error: Exception.externalServiceFailed({ messageKey: "unavailable" }) },
             { name: "unexpected failure", error: new Error("unexpected") },
-        ])("propagates $name without consuming a rejection", async ({ error }) => {
+        ])("[case] - propagates $name without consuming a rejection", async ({ error }) => {
+            // Arrange
             const { commands, positionService, consume } = helpers.commands();
             positionService.validatePlacement.mockRejectedValue(error);
 
-            await expect(commands.validatePlacement({ incoming: INCOMING, ...REQUEST })).rejects.toBe(error);
+            // Act
+            const result = commands.validatePlacement({ incoming: INCOMING, ...REQUEST });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(consume).toHaveBeenCalledTimes(1);
         });
 
-        it("does not validate a message already claimed by the inbox", async () => {
+        it("[case] - does not validate a message already claimed by the inbox", async () => {
+            // Arrange
             const { commands, positionService, consume } = helpers.commands();
             consume.mockResolvedValue({ status: "duplicate" });
 
+            // Act
             await commands.validatePlacement({ incoming: INCOMING, ...REQUEST });
 
+            // Assert
             expect(positionService.validatePlacement).not.toHaveBeenCalled();
             expect(consume).toHaveBeenCalledTimes(1);
         });
     });
 
-    describe("rejectPlacement", () => {
-        it("records a terminal rejection and its audit without repeating domain validation", async () => {
+    describe("[Method] - rejectPlacement", () => {
+        it("[case] - records a terminal rejection and its audit without repeating domain validation", async () => {
+            // Arrange
             const { commands, positionService, consume } = helpers.commands();
             const reason = "retries exhausted";
 
+            // Act
             await commands.rejectPlacement({ incoming: INCOMING, request: REQUEST, reason });
 
+            // Assert
             expect(positionService.validatePlacement).not.toHaveBeenCalled();
             expect(consume.mock.calls).toEqual([
                 [
@@ -127,61 +144,70 @@ describe("PositionCommands", () => {
             ]);
         });
 
-        it("propagates a failure to persist the rejection", async () => {
+        it("[case] - propagates a failure to persist the rejection", async () => {
+            // Arrange
             const { commands, consume } = helpers.commands();
             const error = new Error("outbox unavailable");
             consume.mockRejectedValue(error);
 
-            await expect(
-                commands.rejectPlacement({ incoming: INCOMING, request: REQUEST, reason: "refused" }),
-            ).rejects.toBe(error);
+            // Act
+            const result = commands.rejectPlacement({ incoming: INCOMING, request: REQUEST, reason: "refused" });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(consume).toHaveBeenCalledTimes(1);
         });
     });
 
-    describe("completeReference", () => {
+    describe("[Method] - completeReference", () => {
         it.each([
             { type: PositionReferenceType.DEPARTMENT_MANAGER, rejected: false },
             { type: PositionReferenceType.DEPARTMENT_MANAGER, rejected: true },
             { type: PositionReferenceType.TEAM_LEAD, rejected: false },
             { type: PositionReferenceType.TEAM_LEAD, rejected: true },
-        ])("completes $type with rejected=$rejected using the response correlation", async ({ type, rejected }) => {
-            const { commands, positionService, consume, transaction } = helpers.commands();
-            const request: Topics.Position.ReferenceRequestedMessage["payload"] = {
-                actor: REQUEST.actor,
-                realm: REQUEST.realm,
-                input:
-                    type === PositionReferenceType.TEAM_LEAD
-                        ? { ...REQUEST.input, type }
-                        : {
-                              organization: REQUEST.input.organization,
-                              department: REQUEST.input.department,
-                              position: REQUEST.input.position,
-                              process: REQUEST.input.process,
-                              type,
-                          },
-            };
+        ])(
+            "[case] - completes $type with rejected=$rejected using the response correlation",
+            async ({ type, rejected }) => {
+                // Arrange
+                const { commands, positionService, consume, transaction } = helpers.commands();
+                const request: Topics.Position.ReferenceRequestedMessage["payload"] = {
+                    actor: REQUEST.actor,
+                    realm: REQUEST.realm,
+                    input:
+                        type === PositionReferenceType.TEAM_LEAD
+                            ? { ...REQUEST.input, type }
+                            : {
+                                  organization: REQUEST.input.organization,
+                                  department: REQUEST.input.department,
+                                  position: REQUEST.input.position,
+                                  process: REQUEST.input.process,
+                                  type,
+                              },
+                };
 
-            await commands.completeReference({ incoming: INCOMING, ...request, rejected });
+                // Act
+                await commands.completeReference({ incoming: INCOMING, ...request, rejected });
 
-            expect(positionService.completeReference.mock.calls).toEqual([
-                [{ ...request, transaction: transaction.entityManager, rejected }],
-            ]);
-            expect(consume).toHaveBeenCalledTimes(1);
-            expect(consume).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    incoming: INCOMING,
-                    changeLog: true,
-                    audit: expect.objectContaining({ ...request, context: CONSUMER_META }),
-                }),
-            );
-            expect(consume.mock.calls[0][0]).not.toHaveProperty("outbox");
-        });
+                // Assert
+                expect(positionService.completeReference.mock.calls).toEqual([
+                    [{ ...request, transaction: transaction.entityManager, rejected }],
+                ]);
+                expect(consume).toHaveBeenCalledTimes(1);
+                expect(consume).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        incoming: INCOMING,
+                        changeLog: true,
+                        audit: expect.objectContaining({ ...request, context: CONSUMER_META }),
+                    }),
+                );
+                expect(consume.mock.calls[0][0]).not.toHaveProperty("outbox");
+            },
+        );
     });
 
-    describe("release", () => {
-        it("removes references for the event positions within their organization", async () => {
+    describe("[Method] - release", () => {
+        it("[case] - removes references for the event positions within their organization", async () => {
+            // Arrange
             const { commands, positionService, consume, transaction } = helpers.commands();
             const request: Topics.Position.LifecycleMessage["payload"] = {
                 input: { organization: REQUEST.input.organization, positions: ["position-a", "position-b"] },
@@ -189,8 +215,10 @@ describe("PositionCommands", () => {
                 realm: REQUEST.realm,
             };
 
+            // Act
             await commands.release({ incoming: INCOMING, ...request });
 
+            // Assert
             expect(positionService.release.mock.calls).toEqual([[{ ...request, transaction: transaction.entityManager }]]);
             expect(consume).toHaveBeenCalledTimes(1);
             expect(consume).toHaveBeenCalledWith(
@@ -203,7 +231,8 @@ describe("PositionCommands", () => {
             expect(consume.mock.calls[0][0]).not.toHaveProperty("outbox");
         });
 
-        it("propagates cleanup failure so the consumer can retry", async () => {
+        it("[case] - propagates cleanup failure so the consumer can retry", async () => {
+            // Arrange
             const { commands, positionService, consume } = helpers.commands();
             const error = new Error("cleanup unavailable");
             positionService.release.mockRejectedValue(error);
@@ -213,8 +242,11 @@ describe("PositionCommands", () => {
                 realm: REQUEST.realm,
             };
 
-            await expect(commands.release({ incoming: INCOMING, ...request })).rejects.toBe(error);
+            // Act
+            const result = commands.release({ incoming: INCOMING, ...request });
 
+            // Assert
+            await expect(result).rejects.toBe(error);
             expect(consume).toHaveBeenCalledTimes(1);
         });
     });

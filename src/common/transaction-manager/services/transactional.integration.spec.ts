@@ -9,7 +9,7 @@ import { ActionType, EntityType, KafkaTopic } from "~context/enums";
 
 import { AuditLog, ChangeLog, Inbox, Outbox } from "../entities";
 
-describe("TransactionalService integration", () => {
+describe("[CommonService] - Transactional", () => {
     const helper = new TransactionalHelper();
     const suite = postgresSuite({
         repository: ({ orm }) => helper.createTransactionalServiceContext({ orm }),
@@ -30,10 +30,12 @@ describe("TransactionalService integration", () => {
         consumerKey: "organization.placeholder.v1",
     };
 
-    describe("consume", () => {
-        it("commits inbox and effects exactly once", async () => {
+    describe("[Method] - consume", () => {
+        it("[case] - commits inbox and effects exactly once", async () => {
+            // Arrange
             const executeDuplicate = jest.fn(() => Promise.reject(new Error("duplicate callback must not execute")));
 
+            // Act
             const first = await suite.repository().service.consume({
                 incoming: INCOMING_MESSAGE,
                 audit: AUDIT_PROPS,
@@ -44,92 +46,114 @@ describe("TransactionalService integration", () => {
                 audit: AUDIT_PROPS,
                 execute: executeDuplicate,
             });
-
             const readManager = suite.repository().readManager;
             readManager.clear();
+            const result = await readManager.count(Inbox, {});
+            const result1 = await readManager.count(AuditLog, {});
+            const result2 = await readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE });
 
+            // Assert
             expect(first).toEqual({ status: "processed", value: undefined });
             expect(duplicate).toEqual({ status: "duplicate" });
             expect(executeDuplicate).not.toHaveBeenCalled();
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
-            await expect(readManager.count(AuditLog, {})).resolves.toBe(1);
-            await expect(readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE })).resolves.toBe(1);
+            expect(result).toBe(1);
+            expect(result1).toBe(1);
+            expect(result2).toBe(1);
         });
 
-        it("rolls back a failed claim and allows redelivery", async () => {
+        it("[case] - rolls back a failed claim and allows redelivery", async () => {
+            // Arrange
             const incoming = { ...INCOMING_MESSAGE, event: "00000000-0000-4000-8000-000000000002" };
             const failure = new Error("domain failed");
 
-            await expect(
-                suite.repository().service.consume({
-                    incoming,
-                    execute: () => Promise.reject(failure),
-                }),
-            ).rejects.toBe(failure);
-
+            // Act
+            const result = suite.repository().service.consume({
+                incoming,
+                execute: () => Promise.reject(failure),
+            });
+            await Promise.allSettled([result]);
             const readManager = suite.repository().readManager;
             readManager.clear();
-            await expect(readManager.count(Inbox, {})).resolves.toBe(0);
+            const result1 = await readManager.count(Inbox, {});
+            const result2 = await suite.repository().service.consume({ incoming, execute: () => Promise.resolve() });
+            readManager.clear();
+            const result3 = await readManager.count(Inbox, {});
 
-            await expect(
-                suite.repository().service.consume({ incoming, execute: () => Promise.resolve() }),
-            ).resolves.toEqual({
+            // Assert
+            await expect(result).rejects.toBe(failure);
+            expect(result1).toBe(0);
+            expect(result2).toEqual({
                 status: "processed",
                 value: undefined,
             });
-
-            readManager.clear();
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
+            expect(result3).toBe(1);
         });
 
-        it("allows only one concurrent transaction to process an event", async () => {
+        it("[case] - allows only one concurrent transaction to process an event", async () => {
+            // Arrange
             const incoming = { ...INCOMING_MESSAGE, event: "00000000-0000-4000-8000-000000000003" };
             const execute = jest.fn(() => Promise.resolve());
+
+            // Act
             const consume = (): TransactionManager.Service.Consume.Result<void> =>
                 suite.repository().service.consume({ incoming, execute });
-
             const outcomes = await Promise.all([consume(), consume()]);
             const readManager = suite.repository().readManager;
             readManager.clear();
+            const result = outcomes.map(({ status }) => status).sort();
+            const result1 = await readManager.count(Inbox, {});
 
-            expect(outcomes.map(({ status }) => status).sort()).toEqual(["duplicate", "processed"]);
+            // Assert
+            expect(result).toEqual(["duplicate", "processed"]);
             expect(execute).toHaveBeenCalledTimes(1);
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
+            expect(result1).toBe(1);
         });
     });
 
-    describe("run", () => {
-        it("commits audit log and archive outbox in one trace", async () => {
+    describe("[Method] - run", () => {
+        it("[case] - commits audit log and archive outbox in one trace", async () => {
+            // Arrange
+
+            // Act
             await suite.repository().service.run({
                 audit: { ...AUDIT_PROPS, input: { password: "secret-value" } },
                 execute: () => Promise.resolve(),
             });
-
             const readManager = suite.repository().readManager;
             readManager.clear();
             const auditLogs = await readManager.find(AuditLog, {});
+            const result = auditLogs;
+            const result1 = auditLogs[0];
+            const result2 = await readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE });
+            const result3 = await readManager.count(ChangeLog, {});
 
-            expect(auditLogs).toHaveLength(1);
-            expect(auditLogs[0]).toEqual(
+            // Assert
+            expect(result).toHaveLength(1);
+            expect(result1).toEqual(
                 expect.objectContaining({
                     input: { password: "masked:secret-value" },
                     signature: expect.stringContaining("signed:AuditLog:"),
                     keyVersion: 7,
                 }),
             );
-            await expect(readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE })).resolves.toBe(1);
-            await expect(readManager.count(ChangeLog, {})).resolves.toBe(0);
+            expect(result2).toBe(1);
+            expect(result3).toBe(0);
         });
 
-        it("runs without audit context", async () => {
+        it("[case] - runs without audit context", async () => {
+            // Arrange
+
+            // Act
             await suite.repository().service.run({
                 execute: () => Promise.resolve(),
             });
 
+            // Assert
             await helper.expectNoTransactionRows(suite.repository().readManager);
         });
 
-        it("does not execute domain code when audit signing fails", async () => {
+        it("[case] - does not execute domain code when audit signing fails", async () => {
+            // Arrange
             const externalError = new Error("vault signing unavailable");
             const execute = jest.fn<(transaction: ORM.EntityManager) => void>();
             const logMaskingService = helper.createLogMaskingService({
@@ -140,20 +164,24 @@ describe("TransactionalService integration", () => {
                 logMaskingService,
             }).service;
 
-            await expect(
-                service.run({
-                    audit: AUDIT_PROPS,
-                    execute,
-                }),
-            ).rejects.toBe(externalError);
+            // Act
+            const result = service.run({
+                audit: AUDIT_PROPS,
+                execute,
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(externalError);
             expect(execute).not.toHaveBeenCalled();
             await helper.expectNoTransactionRows(suite.repository().readManager);
         });
     });
 
-    describe("emit", () => {
-        it("emits audit log, audit archive and outbox without change log", async () => {
+    describe("[Method] - emit", () => {
+        it("[case] - emits audit log, audit archive and outbox without change log", async () => {
+            // Arrange
+
+            // Act
             await suite.repository().service.emit({
                 audit: { ...AUDIT_PROPS, input: { password: "rejected-secret" } },
                 payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
@@ -164,7 +192,13 @@ describe("TransactionalService integration", () => {
             const readManager = suite.repository().readManager;
             readManager.clear();
             const auditLogs = await readManager.find(AuditLog, {});
+            const result = await readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE });
 
+            const result2 = await readManager.count(Outbox, { destinationTopic: KafkaTopic.ACCESS_CACHE });
+
+            const result3 = await readManager.count(ChangeLog, {});
+
+            // Assert
             expect(auditLogs).toHaveLength(1);
             expect(auditLogs[0]).toEqual(
                 expect.objectContaining({
@@ -173,12 +207,13 @@ describe("TransactionalService integration", () => {
                     keyVersion: 7,
                 }),
             );
-            await expect(readManager.count(Outbox, { destinationTopic: KafkaTopic.AUDIT_LOG_ARCHIVE })).resolves.toBe(1);
-            await expect(readManager.count(Outbox, { destinationTopic: KafkaTopic.ACCESS_CACHE })).resolves.toBe(1);
-            await expect(readManager.count(ChangeLog, {})).resolves.toBe(0);
+            expect(result).toBe(1);
+            expect(result2).toBe(1);
+            expect(result3).toBe(0);
         });
 
-        it("preserves external dependency errors raised before transaction commit", async () => {
+        it("[case] - preserves external dependency errors raised before transaction commit", async () => {
+            // Arrange
             const externalError = new Error("schema registry unavailable");
             const outboxService = helper.createOutboxService({
                 build: () => {
@@ -191,20 +226,21 @@ describe("TransactionalService integration", () => {
                 outboxService,
             }).service;
 
-            await expect(
-                service.emit({
-                    audit: AUDIT_PROPS,
-                    payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
-                    actionType: AccessCacheTopicAction.INVALIDATE,
-                    destinationTopic: KafkaTopic.ACCESS_CACHE,
-                }),
-            ).rejects.toBe(externalError);
+            // Act
+            const result = service.emit({
+                audit: AUDIT_PROPS,
+                payload: { items: [{ scope: InvalidationScope.GLOBAL }] },
+                actionType: AccessCacheTopicAction.INVALIDATE,
+                destinationTopic: KafkaTopic.ACCESS_CACHE,
+            });
 
+            // Assert
+            await expect(result).rejects.toBe(externalError);
             await helper.expectNoTransactionRows(suite.repository().readManager);
         });
     });
 
-    describe("consume with payload", () => {
+    describe("[Behavior] - payload consumption", () => {
         const props = {
             incoming: INCOMING_MESSAGE,
             audit: { ...AUDIT_PROPS, input: { password: "payload-secret" } },
@@ -213,76 +249,116 @@ describe("TransactionalService integration", () => {
             destinationTopic: KafkaTopic.ACCESS_CACHE,
         } satisfies TransactionManager.Service.Consume.PayloadProps;
 
-        it("commits the inbox, masked audit and payload exactly once", async () => {
+        it("[case] - commits the inbox, masked audit and payload exactly once", async () => {
+            // Arrange
             const { service, readManager } = suite.repository();
-
             const first = await service.consume(props);
             const duplicate = await service.consume(props);
 
+            // Act
             readManager.clear();
-            expect(first).toEqual({ status: "processed", value: undefined });
-            expect(duplicate).toEqual({ status: "duplicate" });
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
-            await expect(readManager.count(ChangeLog, {})).resolves.toBe(0);
-            await expect(readManager.count(Outbox, {})).resolves.toBe(2);
-            await expect(readManager.count(AuditLog, {})).resolves.toBe(1);
+            const result = await readManager.count(Inbox, {});
+
+            const result2 = await readManager.count(ChangeLog, {});
+
+            const result3 = await readManager.count(Outbox, {});
+
+            const result4 = await readManager.count(AuditLog, {});
+
             const audit = await readManager.findOneOrFail(AuditLog, { actor: AUDIT_PROPS.actor });
             const event = await readManager.findOneOrFail(Outbox, { destinationTopic: KafkaTopic.ACCESS_CACHE });
+
+            // Assert
+            expect(first).toEqual({ status: "processed", value: undefined });
+            expect(duplicate).toEqual({ status: "duplicate" });
+            expect(result).toBe(1);
+            expect(result2).toBe(0);
+            expect(result3).toBe(2);
+            expect(result4).toBe(1);
             expect(audit.input).toEqual({ password: "masked:payload-secret" });
             expect(event.payload).toEqual(props.payload);
         });
 
-        it("deduplicates concurrent payload deliveries", async () => {
+        it("[case] - deduplicates concurrent payload deliveries", async () => {
+            // Arrange
             const { service, readManager } = suite.repository();
-
             const outcomes = await Promise.all([service.consume(props), service.consume(props)]);
 
+            // Act
             readManager.clear();
+            const result2 = await readManager.count(Inbox, {});
+
+            const result3 = await readManager.count(AuditLog, {});
+
+            const result4 = await readManager.count(Outbox, {});
+
+            // Assert
             expect(outcomes.map(({ status }) => status).sort()).toEqual(["duplicate", "processed"]);
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
-            await expect(readManager.count(AuditLog, {})).resolves.toBe(1);
-            await expect(readManager.count(Outbox, {})).resolves.toBe(2);
+            expect(result2).toBe(1);
+            expect(result3).toBe(1);
+            expect(result4).toBe(2);
         });
 
-        it.each(["outbox", "audit"] as const)("rolls back a failed %s and permits payload redelivery", async (stage) => {
-            const error = new Error("payload effects failed");
-            const outboxService = helper.createOutboxService(
-                stage === "outbox"
-                    ? {
-                          buildAuditLogArchive: () => {
-                              throw error;
-                          },
-                      }
-                    : {},
-            );
-            const logMaskingService = helper.createLogMaskingService(
-                stage === "audit"
-                    ? {
-                          sign: () => Promise.reject(error),
-                      }
-                    : {},
-            );
-            const { readManager, service } = suite.repository();
-            const failing = helper.createTransactionalServiceContext({
-                orm: suite.repository().orm,
-                outboxService,
-                logMaskingService,
-            }).service;
+        it.each(["outbox", "audit"] as const)(
+            "[case] - rolls back a failed %s and permits payload redelivery",
+            async (stage) => {
+                // Arrange
+                const error = new Error("payload effects failed");
+                const outboxService = helper.createOutboxService(
+                    stage === "outbox"
+                        ? {
+                              buildAuditLogArchive: () => {
+                                  throw error;
+                              },
+                          }
+                        : {},
+                );
+                const logMaskingService = helper.createLogMaskingService(
+                    stage === "audit"
+                        ? {
+                              sign: () => Promise.reject(error),
+                          }
+                        : {},
+                );
+                const { readManager, service } = suite.repository();
+                const failing = helper.createTransactionalServiceContext({
+                    orm: suite.repository().orm,
+                    outboxService,
+                    logMaskingService,
+                }).service;
 
-            await expect(failing.consume(props)).rejects.toBe(error);
+                // Act
+                const result = failing.consume(props);
+                await Promise.allSettled([result]);
+                readManager.clear();
+                const result2 = await readManager.count(Inbox, {});
 
-            readManager.clear();
-            await expect(readManager.count(Inbox, {})).resolves.toBe(0);
-            await expect(readManager.count(AuditLog, {})).resolves.toBe(0);
-            await expect(readManager.count(Outbox, {})).resolves.toBe(0);
-            await expect(readManager.count(ChangeLog, {})).resolves.toBe(0);
+                const result3 = await readManager.count(AuditLog, {});
 
-            await expect(service.consume(props)).resolves.toEqual({ status: "processed", value: undefined });
+                const result4 = await readManager.count(Outbox, {});
 
-            readManager.clear();
-            await expect(readManager.count(Inbox, {})).resolves.toBe(1);
-            await expect(readManager.count(AuditLog, {})).resolves.toBe(1);
-            await expect(readManager.count(Outbox, {})).resolves.toBe(2);
-        });
+                const result5 = await readManager.count(ChangeLog, {});
+
+                const result6 = await service.consume(props);
+
+                readManager.clear();
+                const result7 = await readManager.count(Inbox, {});
+
+                const result8 = await readManager.count(AuditLog, {});
+
+                const result9 = await readManager.count(Outbox, {});
+
+                // Assert
+                await expect(result).rejects.toBe(error);
+                expect(result2).toBe(0);
+                expect(result3).toBe(0);
+                expect(result4).toBe(0);
+                expect(result5).toBe(0);
+                expect(result6).toEqual({ status: "processed", value: undefined });
+                expect(result7).toBe(1);
+                expect(result8).toBe(1);
+                expect(result9).toBe(2);
+            },
+        );
     });
 });

@@ -1,146 +1,144 @@
 import { MoveMode } from "~context/enums";
 
 declare global {
-    namespace Commands {
-        namespace Department {
-            interface Contract extends ControllerContract {}
+    namespace Commands.Department {
+        interface Contract extends ControllerContract {}
 
-            interface ControllerContract {
-                move: Move.Signature;
-                changeManager: ChangeManager.Signature;
-                archive: Archive.Signature;
-                restore: Restore.Signature;
-                create: Create.Signature;
-                update: Update.Signature;
-                purge: Purge.Signature;
-            }
+        interface ControllerContract {
+            changeManager: ChangeManager.Signature;
+            archive: Archive.Signature;
+            restore: Restore.Signature;
+            create: Create.Signature;
+            update: Update.Signature;
+            purge: Purge.Signature;
+            move: Move.Signature;
+        }
 
-            namespace Create {
-                type Props = {
-                    input: {
-                        parent?: string;
-                        children?: string[];
-                        description: string;
-                        name: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
-
-                    organization: string;
+        namespace Create {
+            type Props = {
+                input: {
+                    parent?: string;
+                    children?: string[];
+                    description: string;
+                    name: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace Move {
-                type Props = {
-                    input: { target: string; targetParent: Nullable<string>; mode: MoveMode; reason: string };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
+            type Signature = (props: Props) => Result;
+        }
 
-                    organization: string;
+        namespace Move {
+            type Props = {
+                input: { target: string; targetParent: Nullable<string>; mode: MoveMode; reason: string };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
+
+                organization: string;
+            };
+
+            type Result = Promise<MessageResult>;
+
+            type Signature = (props: Props) => Result;
+        }
+
+        namespace Update {
+            type Props = {
+                input: {
+                    patch: Partial<Entities.Department.MutableFields>;
+                    reason: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+                id: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace Update {
-                type Props = {
-                    input: {
-                        patch: Partial<Entities.Department.MutableFields>;
-                        reason: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
+            type Signature = (props: Props) => Result;
+        }
 
-                    organization: string;
-                    id: string;
+        namespace ChangeManager {
+            type Props = {
+                input: {
+                    position: Nullable<string>;
+                    reason: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+                id: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace ChangeManager {
-                type Props = {
-                    input: {
-                        position: Nullable<string>;
-                        reason: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
+            type Signature = (props: Props) => Result;
+        }
 
-                    organization: string;
-                    id: string;
+        namespace Archive {
+            type Props = {
+                input: {
+                    identifiers: string[];
+                    reason: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace Archive {
-                type Props = {
-                    input: {
-                        identifiers: string[];
-                        reason: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
+            type Signature = (props: Props) => Result;
+        }
 
-                    organization: string;
+        namespace Restore {
+            type Props = {
+                input: {
+                    identifiers: string[];
+                    reason: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace Restore {
-                type Props = {
-                    input: {
-                        identifiers: string[];
-                        reason: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
+            type Signature = (props: Props) => Result;
+        }
 
-                    organization: string;
+        namespace Purge {
+            type Props = {
+                input: {
+                    reason: string;
                 };
+                context: Extract.Meta;
+                actor: string;
+                realm: string;
 
-                type Result = Promise<MessageResult>;
+                organization: string;
+                id: string;
+            };
 
-                type Signature = (props: Props) => Result;
-            }
+            type Result = Promise<MessageResult>;
 
-            namespace Purge {
-                type Props = {
-                    input: {
-                        reason: string;
-                    };
-                    context: Extract.Meta;
-                    actor: string;
-                    realm: string;
-
-                    organization: string;
-                    id: string;
-                };
-
-                type Result = Promise<MessageResult>;
-
-                type Signature = (props: Props) => Result;
-            }
+            type Signature = (props: Props) => Result;
         }
     }
 }

@@ -19,71 +19,89 @@ class TestRepository extends BaseRepository<SystemEntities.AuditLog, Repositorie
     }
 }
 
-describe("BaseRepository", () => {
+describe("[Mixin] - BaseRepository", () => {
     const suite = postgresSuite({
         repository: ({ readManager }) => new TestRepository(readManager),
         fixture: (entityManager) => new CoreFixture(entityManager),
     });
 
-    describe("findUnique", () => {
-        it("finds one entity or null by ORM where query", async () => {
+    describe("[Method] - findUnique", () => {
+        it("[case] - finds one entity or null by ORM where query", async () => {
+            // Arrange
             const auditLog = await suite.fixtures().createAuditLog();
 
-            await expect(suite.repository().findUnique({ where: { id: auditLog.id } })).resolves.toMatchObject({
+            // Act
+            const result = await suite.repository().findUnique({ where: { id: auditLog.id } });
+            const result1 = await suite.repository().findUnique({
+                where: { id: "00000000-0000-0000-0000-000000000000" },
+            });
+
+            // Assert
+            expect(result).toMatchObject({
                 id: auditLog.id,
                 signature: "test-signature",
             });
-            await expect(
-                suite.repository().findUnique({
-                    where: { id: "00000000-0000-0000-0000-000000000000" },
-                }),
-            ).resolves.toBeNull();
+            expect(result1).toBeNull();
         });
     });
 
-    describe("findUniqueOrThrow", () => {
-        it("finds one required entity by ORM where query", async () => {
+    describe("[Method] - findUniqueOrThrow", () => {
+        it("[case] - finds one required entity by ORM where query", async () => {
+            // Arrange
             const auditLog = await suite.fixtures().createAuditLog({
                 actionType: ActionType.UPDATE,
             });
 
-            await expect(suite.repository().findUniqueOrThrow({ where: { id: auditLog.id } })).resolves.toMatchObject({
+            // Act
+            const result = await suite.repository().findUniqueOrThrow({ where: { id: auditLog.id } });
+
+            // Assert
+            expect(result).toMatchObject({
                 id: auditLog.id,
                 actionType: ActionType.UPDATE,
             });
         });
     });
 
-    describe("find", () => {
-        it("finds all entities matching an ORM where query", async () => {
+    describe("[Method] - find", () => {
+        it("[case] - finds all entities matching an ORM where query", async () => {
+            // Arrange
             await suite.fixtures().createAuditLog({ actionType: ActionType.CREATE });
             await suite.fixtures().createAuditLog({ actionType: ActionType.CREATE });
             await suite.fixtures().createAuditLog({ actionType: ActionType.DELETE });
 
+            // Act
             const entries = await suite.repository().find({
                 where: { actionType: ActionType.CREATE },
             });
+            const result = entries;
+            const result1 = entries.every(({ actionType }) => actionType === ActionType.CREATE);
 
-            expect(entries).toHaveLength(2);
-            expect(entries.every(({ actionType }) => actionType === ActionType.CREATE)).toBe(true);
+            // Assert
+            expect(result).toHaveLength(2);
+            expect(result1).toBe(true);
         });
     });
 
-    describe("findMany", () => {
-        it("finds and counts entities using explicit ORM where and options", async () => {
+    describe("[Method] - findMany", () => {
+        it("[case] - finds and counts entities using explicit ORM where and options", async () => {
+            // Arrange
             await suite.fixtures().createAuditLog({ actionType: ActionType.CREATE });
             await suite.fixtures().createAuditLog({ actionType: ActionType.CREATE });
 
+            // Act
             const [entries, total] = await suite.repository().findMany({
                 options: { orderBy: { createdAt: QueryOrder.ASC } },
                 where: { actionType: ActionType.CREATE },
             });
 
+            // Assert
             expect(total).toBe(2);
             expect(entries).toHaveLength(2);
         });
 
-        it("finds and counts entities using mapper filters, sort and pagination", async () => {
+        it("[case] - finds and counts entities using mapper filters, sort and pagination", async () => {
+            // Arrange
             await suite.fixtures().createAuditLog({
                 entityType: EntityType.ORGANIZATION,
                 actionType: ActionType.CREATE,
@@ -97,6 +115,7 @@ describe("BaseRepository", () => {
                 actionType: ActionType.UPDATE,
             });
 
+            // Act
             const [entries, total] = await suite.repository().findMany({
                 pagination: { currentPage: 1, elementsPerPage: 1 },
                 sort: { createdAt: QueryOrder.ASC },
@@ -108,11 +127,13 @@ describe("BaseRepository", () => {
                 },
             });
 
+            // Assert
             expect(total).toBe(2);
             expect(entries).toHaveLength(1);
         });
 
-        it("finds and counts entities using mapper filters combined with prefilter", async () => {
+        it("[case] - finds and counts entities using mapper filters combined with prefilter", async () => {
+            // Arrange
             await suite.fixtures().createAuditLog({
                 actionType: ActionType.CREATE,
                 entityType: EntityType.ORGANIZATION,
@@ -122,6 +143,7 @@ describe("BaseRepository", () => {
                 entityType: EntityType.ORGANIZATION,
             });
 
+            // Act
             const [entries, total] = await suite.repository().findMany({
                 prefilter: { entityType: EntityType.ORGANIZATION },
                 filters: {
@@ -134,11 +156,13 @@ describe("BaseRepository", () => {
                 pagination: { currentPage: 1, elementsPerPage: 10 },
             });
 
+            // Assert
             expect(total).toBe(1);
             expect(entries[0]?.actionType).toBe(ActionType.CREATE);
         });
 
-        it("keeps mapper pagination stable when creation timestamps are equal", async () => {
+        it("[case] - keeps mapper pagination stable when creation timestamps are equal", async () => {
+            // Arrange
             const createdAt = new Date("2026-01-01T00:00:00.000Z");
             const first = await suite.fixtures().createAuditLog({ actionType: ActionType.DELETE, createdAt });
             const second = await suite.fixtures().createAuditLog({ actionType: ActionType.DELETE, createdAt });
@@ -147,6 +171,7 @@ describe("BaseRepository", () => {
                 .sort((left, right) => left.id.localeCompare(right.id))
                 .map(({ id }) => id);
 
+            // Act
             const [firstPage, total] = await suite.repository().findMany({
                 filters: { actionType: { operator: PublicStringOperator.EQUAL, value: ActionType.DELETE } },
                 pagination: { currentPage: 1, elementsPerPage: 2 },
@@ -157,9 +182,12 @@ describe("BaseRepository", () => {
                 pagination: { currentPage: 2, elementsPerPage: 2 },
                 sort: { createdAt: QueryOrder.ASC },
             });
+            const result = total;
+            const result1 = [...firstPage, ...secondPage].map(({ id }) => id);
 
-            expect(total).toBe(expectedIDs.length);
-            expect([...firstPage, ...secondPage].map(({ id }) => id)).toEqual(expectedIDs);
+            // Assert
+            expect(result).toBe(expectedIDs.length);
+            expect(result1).toEqual(expectedIDs);
         });
     });
 });

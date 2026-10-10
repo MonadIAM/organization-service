@@ -1,20 +1,18 @@
-declare namespace Services {
-    namespace Account {
-        interface Contract extends ConsumerContract {}
+declare namespace Services.Account {
+    interface Contract extends ConsumerContract {}
 
-        interface ConsumerContract {
-            purge: Purge.Signature;
-        }
+    interface ConsumerContract {
+        purge: Purge.Signature;
+    }
 
-        namespace Purge {
-            type Props = { account: string; transaction: ORM.EntityManager };
+    namespace Purge {
+        type Props = { account: string; transaction: ORM.EntityManager };
 
-            type Result = Promise<{
-                realms: { realm: string }[];
-                access: { realm: string; account: string }[];
-            }>;
+        type Result = Promise<{
+            access: { realm: string; account: string }[];
+            realms: { realm: string }[];
+        }>;
 
-            type Signature = (props: Props) => Result;
-        }
+        type Signature = (props: Props) => Result;
     }
 }
