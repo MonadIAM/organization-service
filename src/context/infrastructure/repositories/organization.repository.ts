@@ -97,7 +97,7 @@ export class OrganizationRepository
             const builder = entityManager.createQueryBuilder(Organization, "o");
 
             builder
-                .select(["o.id", "o.title"])
+                .select(["o.id", "o.title", "o.realm"])
                 .limit(pagination.elementsPerPage)
                 .offset((pagination.currentPage - 1) * pagination.elementsPerPage);
 

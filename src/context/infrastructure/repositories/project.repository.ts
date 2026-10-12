@@ -30,7 +30,7 @@ export class ProjectRepository
             const builder = entityManager.createQueryBuilder(Project, "p");
 
             builder
-                .select(["p.id", "p.name"])
+                .select(["p.id", "p.name", "p.realm"])
                 .limit(pagination.elementsPerPage)
                 .offset((pagination.currentPage - 1) * pagination.elementsPerPage);
 

@@ -84,6 +84,8 @@ describe("[Repository] - Project", () => {
             expect(result).toBe(2);
             expect(result1).toBe(scenario.exact.id);
             expect(result2).toEqual(scenario.expectedNames);
+            expect(projects[0]?.realm).toBe(scenario.exact.realm);
+            expect(projects[0]?.realm).not.toBe(scenario.organization.realm);
         });
     });
 });

@@ -11,6 +11,11 @@ export class ProjectLookupDTO {
     declare public id: string;
 
     @Expose()
+    @Validator.IsUUID()
+    @ApiProperty({ required: true, type: String, format: "uuid" })
+    declare public realm: string;
+
+    @Expose()
     @Validator.IsString()
     @ApiProperty({ required: true, type: String })
     declare public name: string;
