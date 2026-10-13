@@ -46,7 +46,7 @@ seed:
 
 # Test
 test:
-	pnpm run utest
+	pnpm run test
 utest:
 	pnpm run utest
 itest:
