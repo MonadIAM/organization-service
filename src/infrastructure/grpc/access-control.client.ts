@@ -19,7 +19,7 @@ export class AccessControlClient implements GRPC.AccessControl.Client.Contract, 
 
     public async listEffectivePrivileges(request: GRPC.AccessControl.Client.Request): GRPC.AccessControl.Client.Response {
         const response = this.service.listEffectivePrivileges(request);
-        const { privileges } = await firstValueFrom(response);
-        return privileges ?? {};
+        const { privileges, global } = await firstValueFrom(response);
+        return { privileges: privileges ?? {}, global: global ?? {} };
     }
 }

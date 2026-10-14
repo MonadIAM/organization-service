@@ -77,16 +77,29 @@ declare global {
             interface Contract extends InternalContract, PublicContract {}
 
             interface InternalContract {
-                resolveVersionedKey: ResolveVersionedKey.Signature;
+                resolveVersionedKeys: ResolveVersionedKeys.Signature;
+                loadPermissions: LoadPermissions.Signature;
             }
 
-            namespace ResolveVersionedKey {
+            namespace LoadPermissions {
+                type Props = Omit<CheckPermissions.Props, "permissions"> & {
+                    keys: Awaited<ResolveVersionedKeys.Result>;
+                    globalLoaded: boolean;
+                    realmLoaded: boolean;
+                };
+
+                type Result = GRPC.AccessControl.Client.Response;
+
+                type Signature = (props: Props) => Result;
+            }
+
+            namespace ResolveVersionedKeys {
                 type Props = {
                     account: string;
                     realm: string;
                 };
 
-                type Result = Promise<string>;
+                type Result = Promise<{ realm: string; global: string }>;
 
                 type Signature = (props: Props) => Result;
             }

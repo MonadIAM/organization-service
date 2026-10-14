@@ -160,8 +160,6 @@ export type I18nTranslations = {
         "permission": {
             "ACCOUNT_REQUIRED": string;
             "REALM_REQUIRED": string;
-            "REALM_SCOPE_MISSING": string;
-            "REALM_OUT_OF_SESSION_SCOPE": string;
             "INSUFFICIENT_PERMISSIONS": string;
         };
         "authn": {
