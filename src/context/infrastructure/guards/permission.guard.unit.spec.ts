@@ -92,10 +92,10 @@ describe("[Guard] - Permission", () => {
             expect(checkPermissions.mock.calls).toEqual([
                 [
                     {
-                        globalOnly: true,
+                        globalOnly: !realms.includes(REALM_ID),
                         permissions: [PERMISSION],
                         account: ACCOUNT_ID,
-                        realm: SYSTEM_REALM_ID,
+                        realm: REALM_ID,
                     },
                 ],
             ]);
@@ -116,14 +116,14 @@ describe("[Guard] - Permission", () => {
             );
 
             // Assert
-            await expect(result).rejects.toMatchObject({ message: "guard.permission.REALM_OUT_OF_SESSION_SCOPE" });
+            await expect(result).rejects.toMatchObject({ message: "guard.permission.INSUFFICIENT_PERMISSIONS" });
             expect(checkPermissions.mock.calls).toEqual([
                 [
                     {
                         globalOnly: true,
                         permissions: [PERMISSION],
                         account: ACCOUNT_ID,
-                        realm: SYSTEM_REALM_ID,
+                        realm: REALM_ID,
                     },
                 ],
             ]);
@@ -141,14 +141,13 @@ describe("[Guard] - Permission", () => {
             );
 
             // Assert
-            await expect(result).rejects.toMatchObject({ message: "guard.permission.REALM_SCOPE_MISSING" });
+            await expect(result).rejects.toMatchObject({ message: "guard.permission.INSUFFICIENT_PERMISSIONS" });
             expect(checkPermissions).toHaveBeenCalledTimes(1);
         });
 
-        it("[case] - checks only the requested realm after a global miss and a successful session scope check", async () => {
+        it("[case] - checks realm grants with a global fallback in one lookup", async () => {
             // Arrange
-            const { guard, checkPermissions } = helpers.permission();
-            checkPermissions.mockResolvedValueOnce({}).mockResolvedValueOnce({ [PERMISSION]: PrivilegeScope.REALM });
+            const { guard, checkPermissions } = helpers.permission({ matched: { [PERMISSION]: PrivilegeScope.REALM } });
             const request = helpers.request({
                 query: { realm: REALM_ID },
                 session: { account: ACCOUNT_ID, realms: [SYSTEM_REALM_ID, REALM_ID] },
@@ -163,7 +162,6 @@ describe("[Guard] - Permission", () => {
             // Assert
             expect(result1).toBe(true);
             expect(checkPermissions.mock.calls).toEqual([
-                [{ globalOnly: true, permissions: [PERMISSION], account: ACCOUNT_ID, realm: SYSTEM_REALM_ID }],
                 [{ globalOnly: false, permissions: [PERMISSION], account: ACCOUNT_ID, realm: REALM_ID }],
             ]);
             expect(request.metadata.permissions).toEqual({ [PERMISSION]: PrivilegeScope.REALM });
@@ -184,7 +182,7 @@ describe("[Guard] - Permission", () => {
 
             // Assert
             await expect(result).rejects.toMatchObject({ message: "guard.permission.INSUFFICIENT_PERMISSIONS" });
-            expect(checkPermissions).toHaveBeenCalledTimes(2);
+            expect(checkPermissions).toHaveBeenCalledTimes(1);
         });
 
         it("[case] - allows manage with a global grant without requiring a direct system login", async () => {
@@ -238,13 +236,10 @@ describe("[Guard] - Permission", () => {
             expect(checkPermissions).toHaveBeenCalledTimes(1);
         });
 
-        it.each(["global", "realm"])("[case] - fails closed if the %s permission lookup fails", async (stage) => {
+        it.each([true, false])("[case] - fails closed on lookup errors (globalOnly=%s)", async (globalOnly) => {
             // Arrange
             const { guard, checkPermissions } = helpers.permission();
             const error = new Error("permission cache unavailable");
-            if (stage === "realm") {
-                checkPermissions.mockResolvedValueOnce({});
-            }
             checkPermissions.mockRejectedValueOnce(error);
             const request = helpers.request({
                 query: { realm: REALM_ID },
@@ -253,7 +248,10 @@ describe("[Guard] - Permission", () => {
 
             // Act
             const result = guard.canActivate(
-                helpers.context({ request, handlerMetadata: [[REQUIRE_PERMISSION, [PERMISSION]]] }),
+                helpers.context({
+                    request,
+                    handlerMetadata: [[globalOnly ? REQUIRE_GLOBAL_PERMISSION : REQUIRE_PERMISSION, [PERMISSION]]],
+                }),
             );
 
             // Assert

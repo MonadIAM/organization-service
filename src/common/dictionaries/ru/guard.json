@@ -2,8 +2,6 @@
   "permission": {
     "ACCOUNT_REQUIRED": "Для выполнения операции требуется аутентифицированная учетная запись.",
     "REALM_REQUIRED": "Для выполнения операции требуется указать realm.",
-    "REALM_SCOPE_MISSING": "Сессия не содержит область realm.",
-    "REALM_OUT_OF_SESSION_SCOPE": "Запрошенный realm вне области действия сессии.",
     "INSUFFICIENT_PERMISSIONS": "Недостаточно прав для выполнения операции."
   },
   "authn": {

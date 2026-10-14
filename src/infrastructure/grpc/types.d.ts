@@ -18,7 +18,7 @@ declare global {
                 }
 
                 type Request = GRPC.AccessControl.ListEffectivePrivileges.Request;
-                type Response = Promise<GRPC.AccessControl.ListEffectivePrivileges.Response["privileges"]>;
+                type Response = Promise<GRPC.AccessControl.ListEffectivePrivileges.Response>;
             }
         }
     }

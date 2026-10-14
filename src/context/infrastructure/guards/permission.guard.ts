@@ -54,32 +54,8 @@ export class PermissionGuard implements CanActivate {
             throw Exception.forbidden({ messageKey: `${this.dictionaryPath}.REALM_REQUIRED` });
         }
 
-        const globalMatched = await this.accessCacheService.checkPermissions({
-            realm: SYSTEM_REALM_ID,
-            globalOnly: true,
-            permissions,
-            account,
-        });
-
-        if (Object.keys(globalMatched).length) {
-            request.metadata = { ...request.metadata, permissions: globalMatched };
-            return true;
-        }
-
-        if (globalPermissions) {
-            throw Exception.forbidden({ messageKey: `${this.dictionaryPath}.INSUFFICIENT_PERMISSIONS` });
-        }
-
-        if (!realms?.length) {
-            throw Exception.forbidden({ messageKey: `${this.dictionaryPath}.REALM_SCOPE_MISSING` });
-        }
-
-        if (!realms.includes(realm)) {
-            throw Exception.forbidden({ messageKey: `${this.dictionaryPath}.REALM_OUT_OF_SESSION_SCOPE` });
-        }
-
         const matched = await this.accessCacheService.checkPermissions({
-            globalOnly: false,
+            globalOnly: Boolean(globalPermissions) || !realms?.includes(realm),
             permissions,
             account,
             realm,
