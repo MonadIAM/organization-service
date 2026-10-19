@@ -85,6 +85,27 @@ Shared Docker networks are created by the infra repository:
 ----
 
 <details>
+<summary><strong>Stand Configuration</strong></summary>
+
+Runtime settings: [.env.stand.example](.env.stand.example).
+
+| Connection | Stand mode                       | Mounted files / credentials                                    |
+| :--------- | :------------------------------- | :------------------------------------------------------------- |
+| PostgreSQL | CNPG rw / ro, TLS, password      | /tls/postgresql/ca.crt; POSTGRES_USER, POSTGRES_PASSWORD       |
+| Redis      | Sentinel, master discovery, mTLS | /tls/redis/{ca.crt,tls.crt,tls.key}; REDIS_PASSWORD            |
+| Kafka      | TLS + SCRAM-SHA-512              | /tls/kafka/ca.crt; /secrets/kafka/password                     |
+| Vault      | Agent Unix socket                | /vault/proxy/agent.sock                                        |
+
+```sh
+kubectl exec -n monadiam-apps <pod> -c service -- make migrate
+kubectl exec -n monadiam-apps <pod> -c service -- make seed
+```
+
+</details>
+
+----
+
+<details>
 <summary><strong>Local Ports</strong></summary>
 
 | Resource   | Port                                 |
@@ -160,8 +181,8 @@ Shared Docker networks are created by the infra repository:
 [release](.github/workflows/release.yml), [package operations](.github/scripts/packages.sh).
 
 [Dockerfile](docker/app/Dockerfile) targets: `development` for Compose and migration tooling;
-`runner` for GHCR, with production dependencies, compiled application and non-root user.
-Migrations and seeding are separate deployment steps; the runtime starts the service only.
+`runner` for GHCR, with production dependencies, compiled application and TypeScript sources
+for CLI commands. Both targets include `make` and cached `pnpm`; startup runs the service only.
 
 </details>
 
