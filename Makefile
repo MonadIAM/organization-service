@@ -1,4 +1,4 @@
-.PHONY: env build up down restart lint lint-fix tsc knip secrets-check env-check intl-types intl-check lsp migrate migration empty-migration seed test utest itest coverage coverage-unit coverage-integration graphify graphify-rebuild graphify-html image image-publish image-release image-cleanup
+.PHONY: env build up down restart lint lint-fix tsc knip secrets-check env-check intl-types intl-check lsp migrate migration empty-migration seed seed-demo test utest itest coverage coverage-unit coverage-integration graphify graphify-rebuild graphify-html image image-publish image-release image-cleanup
 
 SERVICE_EXEC_WITH_SECRETS ?= docker-compose exec service sh /usr/local/bin/with-vault-secrets.sh
 GRAPHIFY ?= graphify
@@ -45,7 +45,9 @@ migration:
 empty-migration:
 	$(SERVICE_EXEC_WITH_SECRETS) pnpm exec mikro-orm migration:create --blank --name=$(name)
 seed:
-	$(SERVICE_EXEC_WITH_SECRETS) pnpm run db:seed
+	$(SERVICE_EXEC_WITH_SECRETS) pnpm run db:seed --class System
+seed-demo:
+	$(SERVICE_EXEC_WITH_SECRETS) pnpm run db:seed --class Demo
 
 # Container / GHCR
 image:

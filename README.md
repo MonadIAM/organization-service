@@ -81,7 +81,8 @@ Shared Docker networks are created by the infrastructure repository:
 | `make migrate`                    | Apply pending MikroORM migrations in the running service container.                        |
 | `make migration name="..."`       | Generate a MikroORM migration in the running service container.                            |
 | `make empty-migration name="..."` | Generate a blank MikroORM migration.                                                       |
-| `make seed`                       | Run the PostgreSQL seeder in the running service container.                                |
+| `make seed`                       | Replace PostgreSQL data with the `system` dataset in the running service container.        |
+| `make seed-demo`                  | Replace PostgreSQL data with the `demo` dataset in the running service container.          |
 | **Test**                          |                                                                                            |
 | `make test`                       | Run unit and integration tests (Docker required).                                          |
 | `make utest`                      | Run unit tests.                                                                            |
