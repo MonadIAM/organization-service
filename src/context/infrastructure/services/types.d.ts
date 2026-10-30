@@ -1,18 +1,24 @@
 import type { PermissionCode, PrivilegeScope } from "@monadiam/shared";
 
+import { ReauthenticationMethod } from "~context/enums";
+
 declare global {
     namespace InfrastructureServices {
         namespace ReauthenticationCache {
+            type Proof = Topics.Reauthentication.Proof;
+
             interface Contract extends PublicContract {}
 
             interface PublicContract {
                 exists: Exists.Signature;
                 delete: Delete.Signature;
                 set: Set.Signature;
+                get: Get.Signature;
             }
 
             namespace Exists {
                 type Props = {
+                    methods?: ReauthenticationMethod[];
                     session: string;
                 };
 
@@ -34,10 +40,22 @@ declare global {
             namespace Set {
                 type Props = {
                     session: string;
+                    proof?: Proof;
                     ttl: number;
                 };
 
                 type Result = Promise<void>;
+
+                type Signature = (props: Props) => Result;
+            }
+
+            namespace Get {
+                type Props = {
+                    session: string;
+                    method: ReauthenticationMethod;
+                };
+
+                type Result = Promise<Nullable<Proof>>;
 
                 type Signature = (props: Props) => Result;
             }
