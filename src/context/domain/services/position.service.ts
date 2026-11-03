@@ -30,8 +30,8 @@ export class PositionService implements Services.Position.Contract {
             }),
             this.teamRepository.findUniqueOrThrow({
                 where: {
+                    department: { id: input.department, organization: input.organization },
                     organization: input.organization,
-                    department: input.department,
                     status: TeamStatus.ACTIVE,
                     id: input.team,
                 },
