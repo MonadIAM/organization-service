@@ -1108,7 +1108,7 @@ packages:
 
   '@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/2f12914ce10f28699b3837e42a1a2e523fb46fce':
     resolution: {gitHosted: true, tarball: https://codeload.github.com/MonadIAM/shared/tar.gz/2f12914ce10f28699b3837e42a1a2e523fb46fce}
-    version: 3.4.0
+    version: 3.4.1
     engines: {node: 24.18.0}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
