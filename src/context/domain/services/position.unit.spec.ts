@@ -41,7 +41,7 @@ describe("[DomainService] - Position", () => {
             expect(repositories.teams.findUniqueOrThrow).toHaveBeenCalledWith({
                 where: {
                     organization: REQUEST.input.organization,
-                    department: REQUEST.input.department,
+                    department: { id: REQUEST.input.department, organization: REQUEST.input.organization },
                     status: TeamStatus.ACTIVE,
                     id: REQUEST.input.team,
                 },
