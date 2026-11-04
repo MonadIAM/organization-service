@@ -3,6 +3,8 @@ import { Inject, Injectable, Scope } from "@nestjs/common";
 import { ActionType, EntityType, RealmTopicAction, KafkaTopic } from "~context/enums";
 import { TRANSACTIONAL_SERVICE } from "~common/transaction-manager";
 import { MEMBERSHIP_SERVICE } from "~context/domain/services";
+import { CONSUMER_META } from "~context/constants";
+import { Exception } from "~common/exceptions";
 
 import { MembershipMapper } from "../mappers/membership.mapper";
 
@@ -19,6 +21,67 @@ export class MembershipCommands implements Commands.Membership.Contract {
         private readonly membershipService: Services.Membership.CommandContract,
     ) {
         this.mapper = new MembershipMapper();
+    }
+
+    public async completeLeave(props: Commands.Membership.CompleteLeave.Props): Commands.Membership.CompleteLeave.Result {
+        const { incoming, ...request } = props;
+
+        try {
+            await this.transactionalService.consume<Commands.Mappers.Membership.Leave>({
+                incoming,
+                resource: this.resource,
+                outbox: [
+                    {
+                        payloadMapper: this.mapper.accessPayload,
+                        actionType: RealmTopicAction.ACCOUNT_ACCESS_PURGE,
+                        destinationTopic: KafkaTopic.REALM,
+                    },
+                    {
+                        payloadMapper: this.mapper.leaveConfirmed,
+                        actionType: RealmTopicAction.MEMBERSHIP_LEAVE_CONFIRMED,
+                        destinationTopic: KafkaTopic.REALM,
+                    },
+                ],
+                audit: {
+                    entityType: EntityType.MEMBERSHIP,
+                    actionType: ActionType.LEAVE,
+                    context: CONSUMER_META,
+                    ...request,
+                },
+                changeLog: true,
+                execute: async (transaction) => {
+                    const result = await this.membershipService.completeLeave({ ...request, transaction });
+
+                    return { ...result, actor: request.actor, request };
+                },
+            });
+        } catch (error) {
+            if (!(error instanceof Exception) || Boolean(Exception.isRetryable(error))) {
+                throw error;
+            } else {
+                await this.rejectLeave({ incoming, request, reason: error.message });
+            }
+        }
+    }
+
+    public async rejectLeave(props: Commands.Membership.RejectLeave.Props): Commands.Membership.RejectLeave.Result {
+        const { incoming, ...result } = props;
+
+        await this.transactionalService.consume({
+            incoming,
+            resource: this.resource,
+            payload: this.mapper.leaveRejected(result),
+            actionType: RealmTopicAction.MEMBERSHIP_LEAVE_REJECTED,
+            destinationTopic: KafkaTopic.REALM,
+            audit: {
+                entityType: EntityType.MEMBERSHIP,
+                actionType: ActionType.LEAVE,
+                actor: result.request.actor,
+                realm: result.request.realm,
+                context: CONSUMER_META,
+                input: result,
+            },
+        });
     }
 
     public async join(props: Commands.Membership.Join.Props): Commands.Membership.Join.Result {
