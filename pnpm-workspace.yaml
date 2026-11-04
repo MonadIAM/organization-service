@@ -6,6 +6,7 @@ color: true
 loglevel: info
 savePrefix: ""
 overrides:
+  "@fastify/otel>minimatch": "11.0.3"
   "schema-utils@^4": "4.7.0"
   "@nestjs/platform-fastify>fastify": "5.12.7"
   "@nestjs/swagger>js-yaml": "5.4.1"
