@@ -115,6 +115,72 @@ describe("[DomainService] - Membership", () => {
         });
     });
 
+    describe("[Behavior] - HR membership leave", () => {
+        it.each([MembershipStatus.ACTIVE, MembershipStatus.SUSPENDED, MembershipStatus.LEFT, MembershipStatus.BLOCKED])(
+            "[case] - removes assignments and access for a %s membership",
+            async (status) => {
+                // Arrange
+                const membership = helpers.createMembership({ id: MEMBERSHIP_ID, status });
+                const { service, services, repositories, transaction } = helpers.service({ memberships: [membership] });
+                repositories.organizations.findUniqueOrThrow.mockImplementation(() =>
+                    Promise.resolve(membership.organization),
+                );
+                repositories.memberships.findUniqueOrThrow.mockImplementation(() => Promise.resolve(membership));
+                services.projectAssignments.clean.mockImplementation(() => Promise.resolve([]));
+
+                // Act
+                const result = await service.completeLeave({
+                    input: {
+                        organization: membership.organization.id,
+                        account: membership.account,
+                        process: MEMBERSHIP_ID,
+                    },
+                    transaction: transaction.entityManager,
+                    realm: membership.organization.realm,
+                    actor: membership.account,
+                });
+
+                // Assert
+                expect(membership.status).toBe(status === MembershipStatus.BLOCKED ? status : MembershipStatus.LEFT);
+                expect(result.access).toContainEqual({ realm: membership.organization.realm, account: membership.account });
+                expect(services.projectAssignments.clean).toHaveBeenCalledWith({
+                    memberships: [membership.id],
+                    transaction: transaction.entityManager,
+                });
+            },
+        );
+
+        it.each(["owner", "pendingOwner"] as const)("[case] - rejects leaving for the %s", async (field) => {
+            // Arrange
+            const membership = helpers.createMembership({ id: MEMBERSHIP_ID });
+            if (field === "owner") {
+                membership.organization.owner = membership;
+            } else {
+                membership.organization.pendingOwner = membership.id;
+            }
+            const { service, services, repositories, transaction } = helpers.service({ memberships: [membership] });
+            repositories.organizations.findUniqueOrThrow.mockImplementation(() => Promise.resolve(membership.organization));
+            repositories.memberships.findUniqueOrThrow.mockImplementation(() => Promise.resolve(membership));
+
+            // Act
+            const result = service.completeLeave({
+                input: {
+                    organization: membership.organization.id,
+                    account: membership.account,
+                    process: MEMBERSHIP_ID,
+                },
+                transaction: transaction.entityManager,
+                realm: membership.organization.realm,
+                actor: membership.account,
+            });
+
+            // Assert
+            await expect(result).rejects.toThrow("services.membership.OWNER_ACCESS_REQUIRED");
+            expect(membership.status).toBe(MembershipStatus.ACTIVE);
+            expect(services.projectAssignments.clean).not.toHaveBeenCalled();
+        });
+    });
+
     describe("[Behavior] - membership removal", () => {
         it.each([
             {

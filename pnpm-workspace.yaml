@@ -10,9 +10,9 @@ overrides:
   "schema-utils@^4": "4.7.0"
   "@nestjs/platform-fastify>fastify": "5.12.7"
   "@nestjs/swagger>js-yaml": "5.4.1"
-  "glob": "14.0.2"
+  "glob@>=9 <14.0.2": "14.0.2"
 allowBuilds:
-  "@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/2f12914ce10f28699b3837e42a1a2e523fb46fce": true
+  "@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/0b26986af8f2d7767a6b02cd72843fc863df097a": true
   "@launchql/protobufjs": true
   "msgpackr-extract": true
   "unrs-resolver": true

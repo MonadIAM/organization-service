@@ -1,5 +1,32 @@
 declare namespace Commands.Membership {
-    interface Contract extends ControllerContract, InternalContract {}
+    interface Contract extends ControllerContract, InternalContract, ConsumerContract {}
+
+    interface ConsumerContract {
+        completeLeave: CompleteLeave.Signature;
+        rejectLeave: RejectLeave.Signature;
+    }
+
+    namespace CompleteLeave {
+        type Props = Topics.Realm.MembershipLeaveRequestedMessage["payload"] & {
+            incoming: TransactionManager.Service.IncomingMessage;
+        };
+
+        type Result = Promise<void>;
+
+        type Signature = (props: Props) => Result;
+    }
+
+    namespace RejectLeave {
+        type Props = {
+            request: Topics.Realm.MembershipLeaveRequestedMessage["payload"];
+            incoming: TransactionManager.Service.IncomingMessage;
+            reason: string;
+        };
+
+        type Result = Promise<void>;
+
+        type Signature = (props: Props) => Result;
+    }
 
     interface InternalContract {
         join: Join.Signature;

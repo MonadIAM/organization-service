@@ -23,6 +23,41 @@ export class MembershipService implements Services.Membership.Contract {
         private readonly organizationRepository: Repositories.Organization.Contract,
     ) {}
 
+    public async completeLeave(props: Services.Membership.CompleteLeave.Props): Services.Membership.CompleteLeave.Result {
+        const { transaction, input, realm } = props;
+        const organization = await this.organizationRepository.findUniqueOrThrow({
+            options: { lockMode: LockMode.PESSIMISTIC_WRITE, refresh: true },
+            where: { id: input.organization, realm },
+            transaction,
+        });
+        const membership = await this.membershipRepository.findUniqueOrThrow({
+            options: { populate: ["organization"], refresh: true },
+            where: { organization: organization.id, account: input.account },
+            transaction,
+        });
+
+        if (organization.owner.id === membership.id || organization.pendingOwner === membership.id) {
+            throw Exception.invariantViolation({ messageKey: `${this.dictionaryPath}.OWNER_ACCESS_REQUIRED` });
+        }
+        if (![MembershipStatus.BLOCKED, MembershipStatus.LEFT].includes(membership.status)) {
+            membership.leave();
+        }
+
+        const projectAssignments = await this.projectAssignmentService.clean({
+            memberships: [membership.id],
+            transaction,
+        });
+        const access = await this.collectAccess({ memberships: [membership], transaction });
+
+        return {
+            memberships: [membership],
+            assignments: {
+                project: projectAssignments,
+            },
+            access,
+        };
+    }
+
     public async confirmJoin(props: Services.Membership.ConfirmJoin.Props): Services.Membership.ConfirmJoin.Result {
         const { input, realm, transaction } = props;
         const membership = await this.membershipRepository.findUnique({
