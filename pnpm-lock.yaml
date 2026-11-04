@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@fastify/otel>minimatch': 11.0.3
   schema-utils@^4: 4.7.0
   '@nestjs/platform-fastify>fastify': 5.12.7
   '@nestjs/swagger>js-yaml': 5.4.1
@@ -1108,7 +1109,7 @@ packages:
 
   '@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/2f12914ce10f28699b3837e42a1a2e523fb46fce':
     resolution: {gitHosted: true, tarball: https://codeload.github.com/MonadIAM/shared/tar.gz/2f12914ce10f28699b3837e42a1a2e523fb46fce}
-    version: 3.4.0
+    version: 3.4.1
     engines: {node: 24.18.0}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
@@ -5468,7 +5469,7 @@ snapshots:
       '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation': 0.219.0(@opentelemetry/api@1.9.1)(supports-color@8.1.1)
       '@opentelemetry/semantic-conventions': 1.43.0
-      minimatch: 10.2.6
+      minimatch: 11.0.3
     transitivePeerDependencies:
       - supports-color
 
