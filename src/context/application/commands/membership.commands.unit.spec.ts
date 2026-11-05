@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 
 import { MembershipCommandsUnitHelpers } from "~testing/unit/command-services/membership.helpers";
+import { Exception } from "~common/exceptions";
 import { KafkaTopic, RealmTopicAction } from "~context/enums";
 
 const ACTOR = "actor-account";
@@ -11,6 +12,63 @@ const CONTEXT: Extract.Meta = { ip: "127.0.0.1", userAgent: "unit-test" };
 const helpers = new MembershipCommandsUnitHelpers();
 
 describe("[Commands] - Membership", () => {
+    describe("[Behavior] - HR ensure", () => {
+        it("[case] - consumes a request and configures join and confirmation outboxes", async () => {
+            // Arrange
+            const { commands, membershipService, consume } = helpers.commands();
+            const membership = helpers.createMembership();
+            membershipService.ensure.mockResolvedValue(membership);
+            const request = {
+                input: { organization: ID, process: "hr-request", account: ACCOUNT },
+                actor: ACTOR,
+                realm: REALM,
+            };
+            const incoming = { consumerKey: "organization.realm.v1", event: "ensure-event" };
+
+            // Act
+            await commands.ensure({ ...request, incoming });
+
+            // Assert
+            expect(consume).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    incoming,
+                    changeLog: true,
+                    outbox: [
+                        expect.objectContaining({ actionType: RealmTopicAction.MEMBERSHIP_ENSURE_CONFIRMED }),
+                        expect.objectContaining({ actionType: RealmTopicAction.MEMBERSHIP_JOIN_REQUESTED }),
+                    ],
+                }),
+            );
+            expect(await consume.mock.results[0].value).toMatchObject({ value: { membership, request } });
+        });
+
+        it("[case] - publishes a business refusal through the same inbox event", async () => {
+            // Arrange
+            const { commands, membershipService, consume } = helpers.commands();
+            membershipService.ensure.mockRejectedValue(
+                Exception.conflict({ messageKey: "services.workflow.OPERATION_CONFLICT" }),
+            );
+            const request = {
+                input: { organization: ID, process: "hr-request", account: ACCOUNT },
+                actor: ACTOR,
+                realm: REALM,
+            };
+            const incoming = { consumerKey: "organization.realm.v1", event: "ensure-event" };
+
+            // Act
+            await commands.ensure({ ...request, incoming });
+
+            // Assert
+            expect(consume).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    incoming,
+                    actionType: RealmTopicAction.MEMBERSHIP_ENSURE_REJECTED,
+                    payload: { ...request, input: { ...request.input, reason: "services.workflow.OPERATION_CONFLICT" } },
+                }),
+            );
+        });
+    });
+
     describe("[Method] - join", () => {
         it("[case] - joins in a transaction with the required ownership scope", async () => {
             // Arrange

@@ -23,6 +23,62 @@ export class MembershipService implements Services.Membership.Contract {
         private readonly organizationRepository: Repositories.Organization.Contract,
     ) {}
 
+    public async ensure(props: Services.Membership.Ensure.Props): Services.Membership.Ensure.Result {
+        const { transaction, input, realm } = props;
+        const organization = await this.organizationRepository.findUniqueOrThrow({
+            options: { lockMode: LockMode.PESSIMISTIC_WRITE, refresh: true },
+            where: { id: input.organization, status: OrganizationStatus.ACTIVE, realm },
+            transaction,
+        });
+        const membership = await this.membershipRepository.findUnique({
+            options: { refresh: true },
+            where: { organization: organization.id, account: input.account },
+            transaction,
+        });
+
+        if (membership) {
+            if (membership.status === MembershipStatus.LEFT) {
+                membership.beginJoin();
+            } else if (membership.status !== MembershipStatus.ACTIVE) {
+                throw Exception.conflict({ messageKey: "services.workflow.OPERATION_CONFLICT" });
+            }
+
+            return membership;
+        } else {
+            const entity = new Membership({ organization, account: input.account });
+            entity.beginJoin();
+            transaction.persist(entity);
+
+            return entity;
+        }
+    }
+
+    public async completeEnsure(
+        props: Services.Membership.CompleteEnsure.Props,
+    ): Services.Membership.CompleteEnsure.Result {
+        const { transaction, input, realm } = props;
+        const organization = await this.organizationRepository.findUniqueOrThrow({
+            options: { lockMode: LockMode.PESSIMISTIC_WRITE, refresh: true },
+            where: { realm },
+            transaction,
+        });
+        const membership = await this.membershipRepository.findUniqueOrThrow({
+            options: { refresh: true },
+            where: { organization: organization.id, account: input.account, id: input.membership },
+            transaction,
+        });
+
+        if (!input.hrRequest || membership.process !== input.process || membership.status !== MembershipStatus.JOINING) {
+            throw Exception.conflict({ messageKey: "services.workflow.OPERATION_CONFLICT" });
+        } else if ("reason" in input) {
+            membership.rejectJoin(input.reason);
+        } else {
+            membership.confirmJoin(new Date(input.joinedAt));
+        }
+
+        return membership;
+    }
+
     public async completeLeave(props: Services.Membership.CompleteLeave.Props): Services.Membership.CompleteLeave.Result {
         const { transaction, input, realm } = props;
         const organization = await this.organizationRepository.findUniqueOrThrow({

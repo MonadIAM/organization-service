@@ -12,7 +12,7 @@ overrides:
   "@nestjs/swagger>js-yaml": "5.4.1"
   "glob@>=9 <14.0.2": "14.0.2"
 allowBuilds:
-  "@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/0b26986af8f2d7767a6b02cd72843fc863df097a": true
+  "@monadiam/shared@https://codeload.github.com/MonadIAM/shared/tar.gz/f3bff61a3b870a1c9ade6054a520173aff5832a5": true
   "@launchql/protobufjs": true
   "msgpackr-extract": true
   "unrs-resolver": true

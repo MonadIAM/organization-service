@@ -1,4 +1,45 @@
+import { MembershipStatus } from "~context/enums";
+
 export class MembershipMapper implements Commands.Mappers.Membership.Contract {
+    public ensureJoin(props: Commands.Mappers.Membership.EnsureJoin.Props): Commands.Mappers.Membership.EnsureJoin.Result {
+        if (props.membership.status === MembershipStatus.JOINING) {
+            return [
+                {
+                    actor: props.request.actor,
+                    realm: props.request.realm,
+                    input: {
+                        membership: props.membership.id,
+                        hrRequest: props.request.input.process,
+                        process: props.membership.process!,
+                        command: props.membership.process!,
+                        account: props.membership.account,
+                    },
+                },
+            ];
+        } else {
+            return [];
+        }
+    }
+
+    public ensureConfirmed(
+        props: Commands.Mappers.Membership.EnsureConfirmed.Props,
+    ): Commands.Mappers.Membership.EnsureConfirmed.Result {
+        return props.membership.status === MembershipStatus.ACTIVE ? [props.request] : [];
+    }
+
+    public ensureRejected(
+        props: Commands.Mappers.Membership.EnsureRejected.Props,
+    ): Commands.Mappers.Membership.EnsureRejected.Result {
+        return props.reason === undefined
+            ? []
+            : [
+                  {
+                      ...props.request,
+                      input: { ...props.request.input, reason: props.reason },
+                  },
+              ];
+    }
+
     public leaveConfirmed(
         props: Commands.Mappers.Membership.LeaveConfirmed.Props,
     ): Commands.Mappers.Membership.LeaveConfirmed.Result {

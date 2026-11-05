@@ -23,6 +23,114 @@ export class MembershipCommands implements Commands.Membership.Contract {
         this.mapper = new MembershipMapper();
     }
 
+    public async ensure(props: Commands.Membership.Ensure.Props): Commands.Membership.Ensure.Result {
+        const { incoming, ...request } = props;
+
+        try {
+            await this.transactionalService.consume<Commands.Mappers.Membership.Ensure>({
+                incoming,
+                resource: this.resource,
+                outbox: [
+                    {
+                        payloadMapper: this.mapper.ensureConfirmed,
+                        actionType: RealmTopicAction.MEMBERSHIP_ENSURE_CONFIRMED,
+                        destinationTopic: KafkaTopic.REALM,
+                    },
+                    {
+                        payloadMapper: this.mapper.ensureJoin,
+                        actionType: RealmTopicAction.MEMBERSHIP_JOIN_REQUESTED,
+                        destinationTopic: KafkaTopic.REALM,
+                    },
+                ],
+                audit: {
+                    entityType: EntityType.MEMBERSHIP,
+                    actionType: ActionType.CREATE,
+                    context: CONSUMER_META,
+                    ...request,
+                },
+                changeLog: true,
+                execute: async (transaction) => {
+                    const membership = await this.membershipService.ensure({ ...request, transaction });
+
+                    return { membership, request };
+                },
+            });
+        } catch (error) {
+            if (!(error instanceof Exception) || Boolean(Exception.isRetryable(error))) {
+                throw error;
+            } else {
+                await this.rejectEnsure({ incoming, request, reason: error.message });
+            }
+        }
+    }
+
+    public async completeEnsure(
+        props: Commands.Membership.CompleteEnsure.Props,
+    ): Commands.Membership.CompleteEnsure.Result {
+        const { incoming, ...request } = props;
+
+        await this.transactionalService.consume<Commands.Mappers.Membership.Ensure>({
+            incoming,
+            resource: this.resource,
+            outbox: [
+                {
+                    payloadMapper: this.mapper.ensureConfirmed,
+                    actionType: RealmTopicAction.MEMBERSHIP_ENSURE_CONFIRMED,
+                    destinationTopic: KafkaTopic.REALM,
+                },
+                {
+                    payloadMapper: this.mapper.ensureRejected,
+                    actionType: RealmTopicAction.MEMBERSHIP_ENSURE_REJECTED,
+                    destinationTopic: KafkaTopic.REALM,
+                },
+            ],
+            audit: {
+                entityType: EntityType.MEMBERSHIP,
+                actionType: ActionType.UPDATE,
+                context: CONSUMER_META,
+                ...request,
+            },
+            changeLog: true,
+            execute: async (transaction) => {
+                const membership = await this.membershipService.completeEnsure({ ...request, transaction });
+
+                return {
+                    reason: "reason" in request.input ? request.input.reason : undefined,
+                    membership,
+                    request: {
+                        actor: request.actor,
+                        realm: request.realm,
+                        input: {
+                            organization: membership.organization.id,
+                            process: request.input.hrRequest!,
+                            account: request.input.account,
+                        },
+                    },
+                };
+            },
+        });
+    }
+
+    public async rejectEnsure(props: Commands.Membership.RejectEnsure.Props): Commands.Membership.RejectEnsure.Result {
+        const { incoming, ...result } = props;
+
+        await this.transactionalService.consume({
+            incoming,
+            resource: this.resource,
+            payload: this.mapper.ensureRejected(result)[0],
+            actionType: RealmTopicAction.MEMBERSHIP_ENSURE_REJECTED,
+            destinationTopic: KafkaTopic.REALM,
+            audit: {
+                entityType: EntityType.MEMBERSHIP,
+                actionType: ActionType.CREATE,
+                actor: result.request.actor,
+                realm: result.request.realm,
+                context: CONSUMER_META,
+                input: result,
+            },
+        });
+    }
+
     public async completeLeave(props: Commands.Membership.CompleteLeave.Props): Commands.Membership.CompleteLeave.Result {
         const { incoming, ...request } = props;
 
