@@ -12,6 +12,8 @@ export class MembershipCommandsUnitHelpers
         const execution = this.execution();
 
         const membershipService = {
+            completeEnsure: jest.fn<Services.Membership.CommandContract["completeEnsure"]>(),
+            ensure: jest.fn<Services.Membership.CommandContract["ensure"]>(),
             suspend: jest.fn<Services.Membership.CommandContract["suspend"]>(),
             resume: jest.fn<Services.Membership.CommandContract["resume"]>(),
             leave: jest.fn<Services.Membership.CommandContract["leave"]>(),

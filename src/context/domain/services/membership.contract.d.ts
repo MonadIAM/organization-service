@@ -2,16 +2,42 @@ declare namespace Services.Membership {
     interface Contract extends CommandContract {}
 
     interface CommandContract {
+        completeEnsure: CompleteEnsure.Signature;
         completeLeave: CompleteLeave.Signature;
         collectAccess: CollectAccess.Signature;
         confirmJoin: ConfirmJoin.Signature;
         rejectJoin: RejectJoin.Signature;
         suspend: Suspend.Signature;
+        ensure: Ensure.Signature;
         resume: Resume.Signature;
         clean: Clean.Signature;
         block: Block.Signature;
         leave: Leave.Signature;
         join: Join.Signature;
+    }
+
+    namespace Ensure {
+        type Props = Topics.Realm.MembershipEnsureRequestedMessage["payload"] & {
+            transaction: ORM.EntityManager;
+        };
+
+        type Result = Promise<Entities.Membership>;
+
+        type Signature = (props: Props) => Result;
+    }
+
+    namespace CompleteEnsure {
+        type Props = {
+            input:
+                | Topics.Realm.MembershipJoinConfirmedMessage["payload"]["input"]
+                | Topics.Realm.MembershipJoinRejectedMessage["payload"]["input"];
+            transaction: ORM.EntityManager;
+            realm: string;
+        };
+
+        type Result = Promise<Entities.Membership>;
+
+        type Signature = (props: Props) => Result;
     }
 
     namespace CompleteLeave {

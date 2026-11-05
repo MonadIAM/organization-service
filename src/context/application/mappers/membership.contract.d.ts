@@ -1,9 +1,45 @@
 declare namespace Commands.Mappers.Membership {
     interface Contract {
+        ensureConfirmed: EnsureConfirmed.Signature;
+        ensureRejected: EnsureRejected.Signature;
+        ensureJoin: EnsureJoin.Signature;
         leaveConfirmed: LeaveConfirmed.Signature;
         leaveRejected: LeaveRejected.Signature;
         accessPayload: AccessPayload.Signature;
         joinPayload: JoinPayload.Signature;
+    }
+
+    type Ensure = {
+        request: Topics.Realm.MembershipEnsureRequestedMessage["payload"];
+        membership: Entities.Membership;
+        reason?: string;
+    };
+
+    namespace EnsureJoin {
+        type Props = Ensure;
+
+        type Result = Topics.Realm.MembershipJoinRequestedMessage["payload"][];
+
+        type Signature = (props: Props) => Result;
+    }
+
+    namespace EnsureConfirmed {
+        type Props = Ensure;
+
+        type Result = Topics.Realm.MembershipEnsureConfirmedMessage["payload"][];
+
+        type Signature = (props: Props) => Result;
+    }
+
+    namespace EnsureRejected {
+        type Props = {
+            request: Topics.Realm.MembershipEnsureRequestedMessage["payload"];
+            reason?: string;
+        };
+
+        type Result = Topics.Realm.MembershipEnsureRejectedMessage["payload"][];
+
+        type Signature = (props: Props) => Result;
     }
 
     namespace LeaveConfirmed {

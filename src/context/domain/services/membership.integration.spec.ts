@@ -15,6 +15,131 @@ describe("[DomainService] - Membership", () => {
         fixture: (manager) => new CoreFixture(manager),
     });
 
+    describe("[Behavior] - HR membership ensure", () => {
+        it.each(["new", "left", "active"] as const)("[case] - ensures membership from %s", async (state) => {
+            // Arrange
+            const organization = await suite.fixtures().createOrganization();
+            const account = randomUUID();
+            if (state !== "new") {
+                const membership = await suite.fixtures().createMembership({ organization, account });
+                if (state === "left") {
+                    await suite.transaction(async (transaction) => {
+                        const entity = await transaction.findOneOrFail(Membership, membership.id);
+                        entity.leave();
+                    });
+                }
+            }
+            const request = {
+                actor: randomUUID(),
+                realm: organization.realm,
+                input: { organization: organization.id, process: randomUUID(), account },
+            };
+
+            // Act
+            const membership = await suite.transaction((transaction) =>
+                suite.repository().membershipService.ensure({ ...request, transaction }),
+            );
+            if (state !== "active") {
+                await suite.transaction((transaction) =>
+                    suite.repository().membershipService.completeEnsure({
+                        realm: organization.realm,
+                        input: {
+                            membership: membership.id,
+                            assignment: randomUUID(),
+                            hrRequest: request.input.process,
+                            joinedAt: Date.now(),
+                            process: membership.process!,
+                            command: membership.process!,
+                            role: randomUUID(),
+                            account,
+                        },
+                        transaction,
+                    }),
+                );
+            }
+
+            // Assert
+            await suite.transaction(async (transaction) => {
+                const members = await transaction.find(Membership, { organization: organization.id, account });
+                expect(members).toHaveLength(1);
+                expect(members[0].status).toBe(MembershipStatus.ACTIVE);
+                expect(members[0].process).toBeFalsy();
+            });
+        });
+
+        it.each([MembershipStatus.BLOCKED, MembershipStatus.SUSPENDED] as const)(
+            "[case] - does not bypass %s membership",
+            async (status) => {
+                // Arrange
+                const organization = await suite.fixtures().createOrganization();
+                const membership = await suite.fixtures().createMembership({ organization });
+                await suite.transaction(async (transaction) => {
+                    const entity = await transaction.findOneOrFail(Membership, membership.id);
+                    if (status === MembershipStatus.BLOCKED) {
+                        entity.block();
+                    } else {
+                        entity.suspend();
+                    }
+                });
+
+                // Act
+                const result = suite.transaction((transaction) =>
+                    suite.repository().membershipService.ensure({
+                        input: { organization: organization.id, account: membership.account, process: randomUUID() },
+                        realm: organization.realm,
+                        actor: randomUUID(),
+                        transaction,
+                    }),
+                );
+
+                // Assert
+                await expect(result).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
+            },
+        );
+
+        it("[case] - rejects stale join confirmation and persists a correlated refusal", async () => {
+            // Arrange
+            const organization = await suite.fixtures().createOrganization();
+            const request = {
+                input: { organization: organization.id, process: randomUUID(), account: randomUUID() },
+                realm: organization.realm,
+                actor: randomUUID(),
+            };
+            const membership = await suite.transaction((transaction) =>
+                suite.repository().membershipService.ensure({ ...request, transaction }),
+            );
+            const input = {
+                membership: membership.id,
+                hrRequest: request.input.process,
+                process: membership.process!,
+                command: membership.process!,
+                account: membership.account,
+                reason: "role unavailable",
+            };
+
+            // Act
+            await expect(
+                suite.transaction((transaction) =>
+                    suite.repository().membershipService.completeEnsure({
+                        input: { ...input, process: randomUUID() },
+                        realm: organization.realm,
+                        transaction,
+                    }),
+                ),
+            ).rejects.toThrow("services.workflow.OPERATION_CONFLICT");
+            await suite.transaction((transaction) =>
+                suite.repository().membershipService.completeEnsure({ realm: organization.realm, input, transaction }),
+            );
+
+            // Assert
+            await suite.transaction(async (transaction) => {
+                const entity = await transaction.findOneOrFail(Membership, membership.id);
+                expect(entity).toMatchObject({ status: MembershipStatus.LEFT, failure: "role unavailable" });
+                expect(entity.process).toBeFalsy();
+            });
+        });
+    });
+
     describe("[Behavior] - membership removal", () => {
         it.each([
             { operation: "leave", expectedStatus: MembershipStatus.LEFT },

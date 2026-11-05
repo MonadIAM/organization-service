@@ -71,14 +71,25 @@ export class RealmConsumer implements OnModuleInit, Consumers.Realm.Contract {
         });
         this.schemaRegistry.validate({ topic: KafkaTopic.REALM, value: message });
         switch (message.actionType) {
+            case RealmTopicAction.MEMBERSHIP_ENSURE_REQUESTED:
+                await this.membershipCommands.ensure({ incoming, ...message.payload });
+                break;
             case RealmTopicAction.MEMBERSHIP_LEAVE_REQUESTED:
                 await this.membershipCommands.completeLeave({ incoming, ...message.payload });
                 break;
             case RealmTopicAction.MEMBERSHIP_JOIN_CONFIRMED:
-                await this.inviteCommands.confirmJoin({ incoming, ...message.payload });
+                if (message.payload.input.hrRequest) {
+                    await this.membershipCommands.completeEnsure({ incoming, ...message.payload });
+                } else {
+                    await this.inviteCommands.confirmJoin({ incoming, ...message.payload });
+                }
                 break;
             case RealmTopicAction.MEMBERSHIP_JOIN_REJECTED:
-                await this.inviteCommands.rejectJoin({ incoming, ...message.payload });
+                if (message.payload.input.hrRequest) {
+                    await this.membershipCommands.completeEnsure({ incoming, ...message.payload });
+                } else {
+                    await this.inviteCommands.rejectJoin({ incoming, ...message.payload });
+                }
                 break;
             case RealmTopicAction.BOOTSTRAP_CONFIRMED:
                 if (message.payload.input.type === RealmType.ORGANIZATION) {
@@ -116,7 +127,14 @@ export class RealmConsumer implements OnModuleInit, Consumers.Realm.Contract {
 
         this.schemaRegistry.validate({ topic: KafkaTopic.REALM, value: decoded });
 
-        if (decoded.actionType === RealmTopicAction.MEMBERSHIP_LEAVE_REQUESTED) {
+        if (
+            decoded.actionType === RealmTopicAction.MEMBERSHIP_ENSURE_REQUESTED ||
+            ((decoded.actionType === RealmTopicAction.MEMBERSHIP_JOIN_CONFIRMED ||
+                decoded.actionType === RealmTopicAction.MEMBERSHIP_JOIN_REJECTED) &&
+                decoded.payload.input.hrRequest)
+        ) {
+            throw error;
+        } else if (decoded.actionType === RealmTopicAction.MEMBERSHIP_LEAVE_REQUESTED) {
             await this.membershipCommands.rejectLeave({ incoming, request: decoded.payload, reason: String(error) });
         } else if (
             decoded.actionType === RealmTopicAction.BOOTSTRAP_CONFIRMED &&

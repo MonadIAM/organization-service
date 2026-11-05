@@ -7,7 +7,10 @@ declare namespace Unit.Commands.Membership {
         type Result = Core.Execution.Result & {
             commands: globalThis.Commands.Membership.Contract;
             membershipService: Jest.Mocked<
-                Pick<Services.Membership.CommandContract, "suspend" | "resume" | "leave" | "block" | "join">
+                Pick<
+                    Services.Membership.CommandContract,
+                    "completeEnsure" | "ensure" | "suspend" | "resume" | "leave" | "block" | "join"
+                >
             >;
         };
 
