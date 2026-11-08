@@ -92,42 +92,26 @@ declare global {
         }
 
         namespace AccessCache {
+            type Script = "read" | "write" | "invalidate";
+
+            namespace ExecuteScript {
+                type Props = { script: Script; keys: string[]; args: string[] };
+
+                type Result = Promise<unknown>;
+            }
+
             interface Contract extends InternalContract, PublicContract {}
 
             interface InternalContract {
-                resolveVersionedKeys: ResolveVersionedKeys.Signature;
                 loadPermissions: LoadPermissions.Signature;
-            }
-
-            namespace LoadPermissions {
-                type Props = Omit<CheckPermissions.Props, "permissions"> & {
-                    keys: Awaited<ResolveVersionedKeys.Result>;
-                    globalLoaded: boolean;
-                    realmLoaded: boolean;
-                };
-
-                type Result = GRPC.AccessControl.Client.Response;
-
-                type Signature = (props: Props) => Result;
-            }
-
-            namespace ResolveVersionedKeys {
-                type Props = {
-                    account: string;
-                    realm: string;
-                };
-
-                type Result = Promise<{ realm: string; global: string }>;
-
-                type Signature = (props: Props) => Result;
+                resolveKeys: ResolveKeys.Signature;
+                read: Read.Signature;
             }
 
             interface PublicContract {
                 checkPermissions: CheckPermissions.Signature;
-                deleteAccount: DeleteAccount.Signature;
-                deleteRealm: DeleteRealm.Signature;
+                invalidate: Invalidate.Signature;
                 deleteAll: DeleteAll.Signature;
-                delete: Delete.Signature;
             }
 
             namespace CheckPermissions {
@@ -143,19 +127,39 @@ declare global {
                 type Signature = (props: Props) => Result;
             }
 
-            namespace DeleteAccount {
-                type Props = {
-                    account: string;
-                };
+            namespace ResolveKeys {
+                type Props = Omit<CheckPermissions.Props, "permissions">;
+
+                type Result = Promise<[string, string, string, string]>;
+
+                type Signature = (props: Props) => Result;
+            }
+
+            namespace Read {
+                type Props = CheckPermissions.Props & { keys: Awaited<ResolveKeys.Result> };
+
+                type Result = Promise<{
+                    matched: Awaited<CheckPermissions.Result>;
+                    loaded: boolean;
+                    stale: boolean;
+                }>;
+
+                type Signature = (props: Props) => Result;
+            }
+
+            namespace LoadPermissions {
+                type Props = ResolveKeys.Props & { keys: Awaited<ResolveKeys.Result> };
 
                 type Result = Promise<void>;
 
                 type Signature = (props: Props) => Result;
             }
 
-            namespace DeleteRealm {
+            namespace Invalidate {
                 type Props = {
-                    realm: string;
+                    payload: Topics.ProjectionJournal.Checkpoint["payload"];
+                    partition: number;
+                    offset: string;
                 };
 
                 type Result = Promise<void>;
@@ -167,17 +171,6 @@ declare global {
                 type Result = Promise<void>;
 
                 type Signature = () => Result;
-            }
-
-            namespace Delete {
-                type Props = {
-                    account: string;
-                    realm: string;
-                };
-
-                type Result = Promise<void>;
-
-                type Signature = (props: Props) => Result;
             }
         }
     }

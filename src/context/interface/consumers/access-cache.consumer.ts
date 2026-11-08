@@ -1,6 +1,6 @@
-import { EventPattern, Payload, ClientKafka, Ctx, KafkaContext } from "@nestjs/microservices";
+import { EventPattern, Payload, ClientKafka, Ctx, KafkaContext, KafkaRetriableException } from "@nestjs/microservices";
 import { Controller, Inject, Logger, OnModuleInit } from "@nestjs/common";
-import { InvalidationScope, KafkaTopic } from "@monadiam/shared";
+import { ProjectionScript, KafkaTopic } from "@monadiam/shared";
 import { lastValueFrom } from "rxjs";
 
 import { KAFKA_RETRY_SERVICE, KAFKA_SCHEMA_REGISTRY, KAFKA_SERVICE, KafkaIncomingMapper } from "~infrastructure/kafka";
@@ -30,7 +30,7 @@ export class AccessCacheConsumer implements Consumers.AccessCache.Contract, OnMo
         await this.kafkaClient.connect();
     }
 
-    @EventPattern(KafkaTopic.ACCESS_CACHE)
+    @EventPattern(KafkaTopic.PROJECTION_JOURNAL)
     public async handle(
         @Payload() message: Consumers.AccessCache.Message,
         @Ctx() context: KafkaContext,
@@ -40,38 +40,37 @@ export class AccessCacheConsumer implements Consumers.AccessCache.Contract, OnMo
             event: this.incomingMapper.reference({ context }),
         };
         await this.kafkaRetry.execute({
-            topic: KafkaTopic.ACCESS_CACHE,
+            topic: KafkaTopic.PROJECTION_JOURNAL,
             heartbeat: context.getHeartbeat(),
-            process: () =>
-                this.process({
+            process: () => {
+                return this.process({
                     incoming: this.incomingMapper.map({ consumerKey: this.consumerKey, context }),
                     message,
-                }),
-            reject: (error) => this.reject({ incoming, message, error }),
+                });
+            },
+            reject: (error) => {
+                return this.reject({ incoming, message, error });
+            },
         });
     }
 
     public async process(props: Consumers.AccessCache.Process.Props): Consumers.AccessCache.Process.Result {
-        const message = await this.schemaRegistry.decode<Consumers.AccessCache.Message>({
-            topic: KafkaTopic.ACCESS_CACHE,
-            value: props.message,
-        });
-        this.schemaRegistry.validate({ topic: KafkaTopic.ACCESS_CACHE, value: message });
-        for await (const item of message.payload.items) {
-            switch (item.scope) {
-                case InvalidationScope.ACCOUNT_REALM:
-                    await this.accessCacheService.delete(item);
-                    break;
-                case InvalidationScope.ACCOUNT:
-                    await this.accessCacheService.deleteAccount(item);
-                    break;
-                case InvalidationScope.REALM:
-                    await this.accessCacheService.deleteRealm(item);
-                    break;
-                case InvalidationScope.GLOBAL:
-                    await this.accessCacheService.deleteAll();
-                    break;
+        const { source } = props.incoming;
+        if (source) {
+            const message = await this.schemaRegistry.decode<Consumers.AccessCache.Message>({
+                topic: KafkaTopic.PROJECTION_JOURNAL,
+                value: props.message,
+            });
+            this.schemaRegistry.validate({ topic: KafkaTopic.PROJECTION_JOURNAL, value: message });
+            if (message.actionType === ProjectionScript.CHECKPOINT) {
+                await this.accessCacheService.invalidate({
+                    partition: source.partition,
+                    payload: message.payload,
+                    offset: source.offset,
+                });
             }
+        } else {
+            throw new KafkaRetriableException("Kafka source metadata is missing");
         }
     }
 
@@ -80,16 +79,17 @@ export class AccessCacheConsumer implements Consumers.AccessCache.Contract, OnMo
         this.logger.warn(`Rejected message in access cache consumer: ${String(error)}`);
 
         await lastValueFrom(
-            this.kafkaClient.emit(KafkaTopic.ACCESS_CACHE_DEAD, {
+            this.kafkaClient.emit(KafkaTopic.PROJECTION_JOURNAL_DEAD, {
                 key: incoming.event,
                 value: {
-                    originalTopic: KafkaTopic.ACCESS_CACHE,
+                    originalTopic: KafkaTopic.PROJECTION_JOURNAL,
                     error: String(error),
                     payload: message,
                 },
             }),
         );
 
-        this.kafkaMetrics.recordDead({ topic: KafkaTopic.ACCESS_CACHE, error });
+        this.kafkaMetrics.recordDead({ topic: KafkaTopic.PROJECTION_JOURNAL, error });
+        throw error;
     }
 }

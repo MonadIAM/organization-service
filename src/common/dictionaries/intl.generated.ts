@@ -224,6 +224,10 @@ export type I18nTranslations = {
         "account": {
             "TRANSFER_PENDING": string;
         };
+        "access-cache": {
+            "UNAVAILABLE": string;
+            "REALM_MISMATCH": string;
+        };
     };
     "validator": {
         "REQUIRED": string;

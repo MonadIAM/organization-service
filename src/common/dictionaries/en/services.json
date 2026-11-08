@@ -49,5 +49,9 @@
   },
   "account": {
     "TRANSFER_PENDING": "Account cleanup is waiting for ownership transfer"
+  },
+  "access-cache": {
+    "UNAVAILABLE": "An up-to-date permission snapshot is unavailable.",
+    "REALM_MISMATCH": "The projection checkpoint contains a different realm."
   }
 }
