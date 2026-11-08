@@ -108,10 +108,8 @@ export class GuardUnitHelpers extends DomainServiceCoreUnitHelpers implements Un
             Promise.resolve(props.matched ?? {}),
         );
         const cache = this.contract<InfrastructureServices.AccessCache.PublicContract>({
-            deleteAccount: jest.fn(() => Promise.resolve()),
-            deleteRealm: jest.fn(() => Promise.resolve()),
             deleteAll: jest.fn(() => Promise.resolve()),
-            delete: jest.fn(() => Promise.resolve()),
+            invalidate: jest.fn(() => Promise.resolve()),
             checkPermissions,
         });
 

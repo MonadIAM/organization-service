@@ -1,6 +1,6 @@
 import { type ClientGrpc as ClientGRPC } from "@nestjs/microservices";
 import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, timeout } from "rxjs";
 
 import { GRPC_CONFIG } from "./tokens";
 
@@ -18,8 +18,14 @@ export class AccessControlClient implements GRPC.AccessControl.Client.Contract, 
     }
 
     public async listEffectivePrivileges(request: GRPC.AccessControl.Client.Request): GRPC.AccessControl.Client.Response {
-        const response = this.service.listEffectivePrivileges(request);
-        const { privileges, global } = await firstValueFrom(response);
-        return { privileges: privileges ?? {}, global: global ?? {} };
+        const response = this.service.listEffectivePrivileges(request).pipe(timeout(1000));
+        const { privileges, global, revision, globalRevision, revisioned } = await firstValueFrom(response);
+        return {
+            globalRevision: globalRevision ?? {},
+            revisioned: revisioned ?? false,
+            privileges: privileges ?? {},
+            revision: revision ?? {},
+            global: global ?? {},
+        };
     }
 }
