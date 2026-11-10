@@ -3,9 +3,9 @@ import { Injectable, Inject } from "@nestjs/common";
 
 import { LOG_MASKING_SERVICE, OUTBOX_SERVICE } from "~common/transaction-manager/services";
 import { ChangeLog, AuditLog, Outbox } from "~common/transaction-manager/entities";
-import { ExternalChanges } from "~infrastructure/database/utils/external-changes";
 import { OperationContext } from "~common/transaction-manager/utilities";
 import { DeltaChanges } from "~common/transaction-manager/value-objects";
+import { ExternalChanges } from "~infrastructure/database/utils/external-changes";
 
 const EXCLUDED_ENTITIES = new Set([AuditLog.name, ChangeLog.name, Outbox.name]);
 
@@ -22,34 +22,36 @@ export class ChangeLogSubscriber implements ORM.EventSubscriber {
     public async onFlush({ uow, em }: ORM.FlushEventArgs): Promise<void> {
         const context = this.operationContext.get();
         if (context?.changeLogEnabled) {
-            const changeSets = [...uow.getChangeSets(), ...ExternalChanges.drain({ entityManager: em })].filter(
-                (set) => !EXCLUDED_ENTITIES.has(set.meta.className),
-            );
-
-            if (changeSets.length) {
+            const entities: SystemEntities.ChangeLog[] = [];
+            for await (const changeSets of [uow.getChangeSets(), ExternalChanges.drain({ entityManager: em })]) {
                 for await (const changeSet of changeSets) {
-                    const delta = this.buildDelta(changeSet);
-                    if (Object.keys(delta).length) {
-                        const maskedDelta = await this.logMaskingService.maskChangeLog({ delta });
-
-                        const entity = new ChangeLog({
-                            entity: this.stringifyPrimaryKey(changeSet.getPrimaryKey()),
-                            entityType: changeSet.meta.className,
-                            auditEntry: context.auditEntry,
-                            changeType: changeSet.type,
-                            delta: maskedDelta,
-                        });
-
-                        const hash = await this.logMaskingService.sign({ entity });
-                        entity.sign(hash);
-
-                        em.persist(entity);
-                        uow.computeChangeSet(entity);
-
-                        const outbox = this.outboxService.buildChangeLogArchive(entity);
-                        em.persist(outbox);
-                        uow.computeChangeSet(outbox);
+                    if (!EXCLUDED_ENTITIES.has(changeSet.meta.className)) {
+                        const delta = this.buildDelta(changeSet);
+                        if (Object.keys(delta).length) {
+                            const maskedDelta = await this.logMaskingService.maskChangeLog({ delta });
+                            entities.push(
+                                new ChangeLog({
+                                    entity: this.stringifyPrimaryKey(changeSet.getPrimaryKey()),
+                                    entityType: changeSet.meta.className,
+                                    auditEntry: context.auditEntry,
+                                    changeType: changeSet.type,
+                                    delta: maskedDelta,
+                                }),
+                            );
+                        }
                     }
+                }
+            }
+            if (entities.length) {
+                const signatures = await this.logMaskingService.signBatch({ entities });
+                for (let index = 0; index < entities.length; index += 1) {
+                    const entity = entities[index];
+                    entity.sign(signatures[index]);
+                    em.persist(entity);
+                    uow.computeChangeSet(entity);
+                    const outbox = this.outboxService.buildChangeLogArchive(entity);
+                    em.persist(outbox);
+                    uow.computeChangeSet(outbox);
                 }
             }
         }

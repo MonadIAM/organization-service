@@ -187,6 +187,8 @@ export type I18nTranslations = {
         "vault": {
             "REQUEST_FAILED": string;
             "INVALID_SIGNATURE": string;
+            "HMAC_COUNT_MISMATCH": string;
+            "SIGNATURE_COUNT_MISMATCH": string;
         };
         "organization": {
             "ORGANIZATIONS_NOT_FOUND": string;
