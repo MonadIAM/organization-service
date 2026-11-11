@@ -8,7 +8,8 @@
     "MESSAGE_INVALID": "The message for subject {subject} does not match the schema. Invalid fields: {fields}."
   },
   "jwt": {
-    "INVALID_ACCESS_TOKEN": "The access token is invalid or expired."
+    "INVALID_ACCESS_TOKEN": "The access token is invalid or expired.",
+    "JWKS_UNAVAILABLE": "The token verification keys are temporarily unavailable."
   },
   "vault": {
     "REQUEST_FAILED": "Vault Transit request failed.",
