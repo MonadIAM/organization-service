@@ -55,5 +55,9 @@
   "access-cache": {
     "UNAVAILABLE": "Актуальный снимок прав недоступен.",
     "REALM_MISMATCH": "Контрольная точка проекции содержит другую область доступа."
+  },
+  "kafka-transport": {
+    "UNSUPPORTED_OPERATION": "Транспорт Kafka не поддерживает эту операцию",
+    "HANDLER_MISSING": "Для топика Kafka не зарегистрирован обработчик"
   }
 }

@@ -230,6 +230,10 @@ export type I18nTranslations = {
             "UNAVAILABLE": string;
             "REALM_MISMATCH": string;
         };
+        "kafka-transport": {
+            "UNSUPPORTED_OPERATION": string;
+            "HANDLER_MISSING": string;
+        };
     };
     "validator": {
         "REQUIRED": string;

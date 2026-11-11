@@ -1,9 +1,16 @@
-import { EventPattern, Payload, ClientKafka, Ctx, KafkaContext, KafkaRetriableException } from "@nestjs/microservices";
+import { EventPattern, Payload, Ctx, KafkaRetriableException } from "@nestjs/microservices";
 import { Controller, Inject, Logger, OnModuleInit } from "@nestjs/common";
 import { ProjectionScript, KafkaTopic } from "@monadiam/shared";
 import { lastValueFrom } from "rxjs";
 
-import { KAFKA_RETRY_SERVICE, KAFKA_SCHEMA_REGISTRY, KAFKA_SERVICE, KafkaIncomingMapper } from "~infrastructure/kafka";
+import {
+    KAFKA_RETRY_SERVICE,
+    KAFKA_SCHEMA_REGISTRY,
+    KAFKA_SERVICE,
+    KafkaIncomingMapper,
+    KafkaClient,
+    KafkaContext,
+} from "~infrastructure/kafka";
 import { ACCESS_CACHE_SERVICE } from "~context/infrastructure/services/tokens";
 import { KAFKA_METRICS_RECORDER } from "~observability/metrics/tokens";
 
@@ -23,7 +30,7 @@ export class AccessCacheConsumer implements Consumers.AccessCache.Contract, OnMo
         @Inject(KAFKA_RETRY_SERVICE)
         private readonly kafkaRetry: Kafka.Retry.Contract,
         @Inject(KAFKA_SERVICE)
-        private readonly kafkaClient: ClientKafka,
+        private readonly kafkaClient: KafkaClient,
     ) {}
 
     public async onModuleInit(): Promise<void> {
