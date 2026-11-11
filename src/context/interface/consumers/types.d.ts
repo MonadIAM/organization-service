@@ -1,4 +1,4 @@
-import { KafkaContext } from "@nestjs/microservices";
+import { KafkaContext } from "~infrastructure/kafka";
 
 declare global {
     namespace Consumers {

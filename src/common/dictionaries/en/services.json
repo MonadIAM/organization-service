@@ -55,5 +55,9 @@
   "access-cache": {
     "UNAVAILABLE": "An up-to-date permission snapshot is unavailable.",
     "REALM_MISMATCH": "The projection checkpoint contains a different realm."
+  },
+  "kafka-transport": {
+    "UNSUPPORTED_OPERATION": "The Kafka transport does not support this operation",
+    "HANDLER_MISSING": "No handler is registered for the Kafka topic"
   }
 }
