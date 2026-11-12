@@ -17,12 +17,12 @@ export class InviteMapper implements Commands.Mappers.Invite.Contract {
             actor: props.invite.inviter,
             realm: props.membership.organization.realm,
             input: {
+                role: props.invite.role ?? undefined,
                 process: props.membership.process!,
                 command: props.membership.process!,
-                membership: props.membership.id,
                 account: props.membership.account,
+                membership: props.membership.id,
                 invite: props.invite.id,
-                role: props.invite.role,
             },
         };
     }
