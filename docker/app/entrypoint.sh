@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+export POSTGRES_PASSWORD
+export REDIS_PASSWORD
+export POSTGRES_USER
+
 wait_for_secret() {
     path="$1"
     i=0
@@ -33,9 +37,9 @@ wait_for_secret /vault/secrets/postgresql_username
 wait_for_secret /vault/secrets/postgresql_password
 wait_for_secret /vault/secrets/redis_password
 
-export POSTGRES_USER="$(cat /vault/secrets/postgresql_username)"
-export POSTGRES_PASSWORD="$(cat /vault/secrets/postgresql_password)"
-export REDIS_PASSWORD="$(cat /vault/secrets/redis_password)"
+POSTGRES_PASSWORD="$(cat /vault/secrets/postgresql_password)"
+POSTGRES_USER="$(cat /vault/secrets/postgresql_username)"
+REDIS_PASSWORD="$(cat /vault/secrets/redis_password)"
 
 wait_for_tcp "$POSTGRES_WRITE_HOST" "$POSTGRES_WRITE_PORT" "PostgreSQL write upstream"
 wait_for_tcp "$POSTGRES_READ_HOST" "$POSTGRES_READ_PORT" "PostgreSQL read upstream"
