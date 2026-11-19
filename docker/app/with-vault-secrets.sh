@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+export POSTGRES_PASSWORD
+export POSTGRES_USER
+
 wait_for_secret() {
     path="$1"
     i=0
@@ -18,7 +21,7 @@ wait_for_secret() {
 wait_for_secret /vault/secrets/postgresql_username
 wait_for_secret /vault/secrets/postgresql_password
 
-export POSTGRES_USER="$(cat /vault/secrets/postgresql_username)"
-export POSTGRES_PASSWORD="$(cat /vault/secrets/postgresql_password)"
+POSTGRES_PASSWORD="$(cat /vault/secrets/postgresql_password)"
+POSTGRES_USER="$(cat /vault/secrets/postgresql_username)"
 
 exec "$@"
