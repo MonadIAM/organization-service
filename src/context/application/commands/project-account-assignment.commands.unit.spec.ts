@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 
 import { ProjectAccountAssignmentCommandsUnitHelpers } from "~testing/unit/command-services/project-account-assignment.helpers";
+import { KafkaTopic, RealmTopicAction } from "~context/enums";
 
 const ACTOR = "actor-account";
 const REALM = "realm-a";
@@ -27,6 +28,12 @@ describe("[Commands] - ProjectAccountAssignment", () => {
             expect(run.mock.calls).toEqual([
                 [expect.objectContaining({ changeLog: true, audit: expect.objectContaining({ actor: ACTOR, input }) })],
             ]);
+            expect(run.mock.calls[0][0].outbox).toEqual(
+                expect.objectContaining({
+                    destinationTopic: KafkaTopic.REALM,
+                    actionType: RealmTopicAction.MEMBERSHIP_JOIN_REQUESTED,
+                }),
+            );
         });
     });
 
@@ -54,6 +61,16 @@ describe("[Commands] - ProjectAccountAssignment", () => {
                 ]);
                 expect(result.params).toEqual(count > 1 ? { count } : undefined);
                 expect(run).toHaveBeenCalledTimes(1);
+                expect(run.mock.calls[0][0].outbox).toEqual(
+                    expect.objectContaining({
+                        destinationTopic: KafkaTopic.REALM,
+                        actionType: {
+                            revoke: RealmTopicAction.ACCOUNT_ACCESS_REVOKE,
+                            restore: RealmTopicAction.ACCOUNT_ACCESS_RESTORE,
+                            purge: RealmTopicAction.ACCOUNT_ACCESS_PURGE,
+                        }[method],
+                    }),
+                );
             },
         );
     });

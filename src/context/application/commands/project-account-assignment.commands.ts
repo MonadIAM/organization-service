@@ -1,11 +1,14 @@
 import { Inject, Injectable, Scope } from "@nestjs/common";
 
+import { ActionType, EntityType, KafkaTopic, RealmTopicAction } from "~context/enums";
 import { PROJECT_ACCOUNT_ASSIGNMENT_SERVICE } from "~context/domain/services";
 import { TRANSACTIONAL_SERVICE } from "~common/transaction-manager";
-import { ActionType, EntityType } from "~context/enums";
+
+import { ProjectAccountAssignmentMapper } from "../mappers/project-account-assignment.mapper";
 
 @Injectable({ scope: Scope.DEFAULT })
 export class ProjectAccountAssignmentCommands implements Commands.ProjectAccountAssignment.Contract {
+    private readonly mapper = new ProjectAccountAssignmentMapper();
     private readonly dictionaryPath = "commands.project-account-assignment";
     private readonly resource = "ProjectAccountAssignment";
 
@@ -23,6 +26,11 @@ export class ProjectAccountAssignmentCommands implements Commands.ProjectAccount
 
         await this.transactionalService.run({
             resource: this.resource,
+            outbox: {
+                destinationTopic: KafkaTopic.REALM,
+                actionType: RealmTopicAction.MEMBERSHIP_JOIN_REQUESTED,
+                payloadMapper: (assignment: Entities.ProjectAccountAssignment) => this.mapper.join(assignment, actor),
+            },
             audit: {
                 actionType: ActionType.CREATE,
                 entityType: EntityType.PROJECT_ACCOUNT_ASSIGNMENT,
@@ -44,6 +52,12 @@ export class ProjectAccountAssignmentCommands implements Commands.ProjectAccount
 
         const assignments = await this.transactionalService.run({
             resource: this.resource,
+            outbox: {
+                destinationTopic: KafkaTopic.REALM,
+                actionType: RealmTopicAction.ACCOUNT_ACCESS_REVOKE,
+                payloadMapper: (assignments: Entities.ProjectAccountAssignment[]) =>
+                    this.mapper.access(assignments, props.actor),
+            },
             audit: {
                 actionType: ActionType.REVOKE,
                 entityType: EntityType.PROJECT_ACCOUNT_ASSIGNMENT,
@@ -69,6 +83,12 @@ export class ProjectAccountAssignmentCommands implements Commands.ProjectAccount
 
         const assignments = await this.transactionalService.run({
             resource: this.resource,
+            outbox: {
+                destinationTopic: KafkaTopic.REALM,
+                actionType: RealmTopicAction.ACCOUNT_ACCESS_RESTORE,
+                payloadMapper: (assignments: Entities.ProjectAccountAssignment[]) =>
+                    this.mapper.access(assignments, props.actor),
+            },
             audit: {
                 actionType: ActionType.RESTORE,
                 entityType: EntityType.PROJECT_ACCOUNT_ASSIGNMENT,
@@ -94,6 +114,12 @@ export class ProjectAccountAssignmentCommands implements Commands.ProjectAccount
 
         const assignments = await this.transactionalService.run({
             resource: this.resource,
+            outbox: {
+                destinationTopic: KafkaTopic.REALM,
+                actionType: RealmTopicAction.ACCOUNT_ACCESS_PURGE,
+                payloadMapper: (assignments: Entities.ProjectAccountAssignment[]) =>
+                    this.mapper.access(assignments, props.actor),
+            },
             audit: {
                 actionType: ActionType.DELETE,
                 entityType: EntityType.PROJECT_ACCOUNT_ASSIGNMENT,
