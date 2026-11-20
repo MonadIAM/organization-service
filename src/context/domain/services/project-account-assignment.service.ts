@@ -58,6 +58,7 @@ export class ProjectAccountAssignmentService implements Services.ProjectAccountA
         const unique = Array.from(new Set(identifiers));
         const entities = await this.assignmentRepository.find({
             where: { id: { $in: unique }, $or: [{ organization: { realm } }, { project: { realm } }] },
+            options: { populate: ["membership", "project"] },
             transaction,
         });
 
@@ -79,6 +80,7 @@ export class ProjectAccountAssignmentService implements Services.ProjectAccountA
         const unique = Array.from(new Set(identifiers));
         const entities = await this.assignmentRepository.find({
             where: { id: { $in: unique }, $or: [{ organization: { realm } }, { project: { realm } }] },
+            options: { populate: ["membership", "project"] },
             transaction,
         });
 
@@ -100,6 +102,7 @@ export class ProjectAccountAssignmentService implements Services.ProjectAccountA
         const unique = Array.from(new Set(identifiers));
         const entities = await this.assignmentRepository.find({
             where: { id: { $in: unique }, $or: [{ organization: { realm } }, { project: { realm } }] },
+            options: { populate: ["membership", "project"] },
             transaction,
         });
 

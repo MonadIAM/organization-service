@@ -1,16 +1,8 @@
-import { EventPattern, Payload, Ctx } from "@nestjs/microservices";
 import { Controller, Inject, Logger, OnModuleInit } from "@nestjs/common";
+import { EventPattern, Payload, Ctx } from "@nestjs/microservices";
 import { RealmTopicAction, RealmType } from "@monadiam/shared";
 import { lastValueFrom } from "rxjs";
 
-import {
-    KAFKA_RETRY_SERVICE,
-    KAFKA_SCHEMA_REGISTRY,
-    KAFKA_SERVICE,
-    KafkaIncomingMapper,
-    KafkaClient,
-    KafkaContext,
-} from "~infrastructure/kafka";
 import { KAFKA_METRICS_RECORDER } from "~observability/metrics/tokens";
 import { KafkaTopic } from "~context/enums";
 import {
@@ -19,6 +11,14 @@ import {
     PROJECT_COMMANDS,
     INVITE_COMMANDS,
 } from "~context/application/commands/tokens";
+import {
+    KAFKA_SCHEMA_REGISTRY,
+    KAFKA_RETRY_SERVICE,
+    KAFKA_SERVICE,
+    KafkaIncomingMapper,
+    KafkaContext,
+    KafkaClient,
+} from "~infrastructure/kafka";
 
 @Controller()
 export class RealmConsumer implements OnModuleInit, Consumers.Realm.Contract {
@@ -87,14 +87,14 @@ export class RealmConsumer implements OnModuleInit, Consumers.Realm.Contract {
             case RealmTopicAction.MEMBERSHIP_JOIN_CONFIRMED:
                 if (message.payload.input.hrRequest) {
                     await this.membershipCommands.completeEnsure({ incoming, ...message.payload });
-                } else {
+                } else if (message.payload.input.invite) {
                     await this.inviteCommands.confirmJoin({ incoming, ...message.payload });
                 }
                 break;
             case RealmTopicAction.MEMBERSHIP_JOIN_REJECTED:
                 if (message.payload.input.hrRequest) {
                     await this.membershipCommands.completeEnsure({ incoming, ...message.payload });
-                } else {
+                } else if (message.payload.input.invite) {
                     await this.inviteCommands.rejectJoin({ incoming, ...message.payload });
                 }
                 break;

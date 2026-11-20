@@ -113,6 +113,7 @@ describe("[DomainService] - ProjectAccountAssignment", () => {
                         id: { $in: [ASSIGNMENT_ID] },
                         $or: [{ organization: { realm: REALM_ID } }, { project: { realm: REALM_ID } }],
                     },
+                    options: { populate: ["membership", "project"] },
                     transaction: transaction.entityManager,
                 },
             ]);

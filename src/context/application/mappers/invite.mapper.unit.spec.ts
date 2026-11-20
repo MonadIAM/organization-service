@@ -9,9 +9,11 @@ const mapper = new InviteMapper();
 
 describe("[DataMapper] - Invite", () => {
     describe("[Method] - joinPayload", () => {
-        it.each(["selected-role", undefined])("[case] - maps invitation acceptance with role %s", (role) => {
+        it.each(["selected-role", undefined, null])("[case] - maps invitation acceptance with role %s", (role) => {
             // Arrange
-            const invite = helpers.createInvite({ role });
+            const invite = helpers.createInvite({ role: role ?? undefined });
+            // Nullable database columns are hydrated as null by MikroORM.
+            Object.assign(invite, { role });
             const membership = helpers.createMembership({ organization: invite.organization, account: invite.invitee });
             membership.beginJoin();
 
@@ -20,7 +22,7 @@ describe("[DataMapper] - Invite", () => {
 
             // Assert
             expect(payload.actor).toBe(invite.inviter);
-            expect(payload.input.role).toBe(role);
+            expect(payload.input.role).toBe(role ?? undefined);
             expect(payload.input.invite).toBe(invite.id);
             expect(payload.input.membership).toBe(membership.id);
             expect(payload.input.account).toBe(invite.invitee);
